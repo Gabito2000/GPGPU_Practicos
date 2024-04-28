@@ -8,9 +8,8 @@ __global__ void addNeighborElement(int *matrix, int width, int height) {
     int currentElementIndex = y * width + x;
     int neighborElementIndex =y * width + (x + 4);
 
-    if (col + 4 < width) {
-        atomicAdd(&matrix[currentElementIndex], matrix[neighborElementIndex]);
-    }
+    if (x >= width) return;
+    atomicAdd(&matrix[currentElementIndex], matrix[neighborElementIndex] );
 }
 
 

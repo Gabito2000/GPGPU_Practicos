@@ -10,7 +10,7 @@ Matriz original:
 80 81 82 83 84 85 86 87 88 89 
 90 91 92 93 94 95 96 97 98 99 
 --------
-Tiempo de ejecución del kernel: 473.757263 ms
+Tiempo de ejecución del kernel: 0.159744 ms
 Resultado: 
 4 6 8 10 12 14 16 18 20 22 
 24 26 28 30 32 34 36 38 40 42 

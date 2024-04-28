@@ -1,27 +1,22 @@
 #include <stdio.h>
 
-#define BLOCK_SIZE 32
+#define BLOCK_SIZE 64
 
-__global__ void sumNeighborElementAligned(int *matrix, int width, int height) {
-    int row = blockIdx.y * blockDim.y + threadIdx.y;
-    int col = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void addNeighborElement(int *matrix, int width, int height) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;    
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int currentElementIndex = y * width + x;
+    int neighborElementIndex =y * width + (x + 4);
 
-    if (row < height && col < width) {
-        int currentElementIndex = row * width + col;
-        int neighborElementIndex = row * width + (col + 4);
-
-        if (col + 4 < width) {
-            atomicAdd(&matrix[currentElementIndex], matrix[neighborElementIndex]);
-        }
-    }
+    if (x >= width) return;
+    atomicAdd(&matrix[currentElementIndex], matrix[neighborElementIndex] );
 }
-
 
 
 int main() {
     // Definir dimensiones de la matriz
-    int width = 1024;
-    int height = 1024;
+    int width = 10;
+    int height = 10;
     int matrixSize = width * height;
 
     // Reservar memoria en el host
@@ -31,6 +26,14 @@ int main() {
     for (int i = 0; i < matrixSize; ++i) {
         h_matrix[i] = i;
     }
+    printf("Matriz original: \n");
+    for (int i = 0; i < height; ++i) {
+        for (int j = 0; j < width; ++j) {
+            printf("%d ", h_matrix[i * width + j]);
+        }
+        printf("\n");
+    }
+    printf("--------\n");
 
     // Reservar memoria en el dispositivo
     int *d_matrix;
@@ -40,7 +43,7 @@ int main() {
     cudaMemcpy(d_matrix, h_matrix, matrixSize * sizeof(int), cudaMemcpyHostToDevice);
 
     // Definir dimensiones de la grilla y tamaño de bloque
-    dim3 blockSize(32, 32);
+    dim3 blockSize(4,4);
     dim3 gridSize((width + blockSize.x - 1) / blockSize.x, (height + blockSize.y - 1) / blockSize.y);
 
 
@@ -64,6 +67,15 @@ int main() {
     // Copiar matriz resultante desde el dispositivo al host
     cudaMemcpy(h_matrix, d_matrix, matrixSize * sizeof(int), cudaMemcpyDeviceToHost);
 
+    printf("Resultado: \n");
+    for (int i = 0; i < height; ++i) {
+        for (int j = 0; j < width; ++j) {
+            printf("%d ", h_matrix[i * width + j]);
+        }
+        printf("\n");
+    }
+    printf("\n");
+
     // Liberar memoria
     free(h_matrix);
     cudaFree(d_matrix);
@@ -71,16 +83,10 @@ int main() {
     return 0;
 }
 
+/*Para mitigar el efecto del acceso desalineado a la memoria global, podemos ajustar los parámetros de la grilla y el bloque para favorecer
+ un patrón de acceso a memoria más coalescente. Esto implica cambiar el tamaño de la grilla y el bloque para que los hilos accedan a elementos
+  de la matriz de manera más coherente.
 
-
-
-/*El patrón de acceso a memoria en el kernel proporcionado en el ejercicio 2a puede no ser óptimo debido a que cada hilo accede a elementos de la matriz de forma desalineada, es decir, los elementos (x, y) y (x+4, y) no están contiguos en memoria. Esto puede resultar en un mayor número de transacciones de memoria y una menor eficiencia en la transferencia de datos entre la GPU y la memoria global.
-
-Para mitigar el efecto del acceso desalineado a la memoria global, podemos reorganizar el acceso de los hilos de manera que accedan a la memoria de forma coalescente. Esto implica que los hilos accedan a elementos de la matriz en patrones de acceso consecutivos, lo que permite agrupar múltiples accesos en una única transacción de memoria.
-
-Una forma de lograr esto es mediante el reordenamiento de los bloques y los hilos de manera que los hilos accedan a elementos contiguos de la matriz en la dimensión que produce coalescencia. Por ejemplo, si tenemos una matriz almacenada en un formato de fila mayor (row-major order), podemos organizar los hilos de manera que cada hilo acceda a una fila completa de la matriz.*/
-
-
-/*En este kernel modificado, cada hilo accede a elementos en la misma fila de manera coalescente. Además, utilizamos atomicAdd para evitar condiciones de carrera al actualizar los elementos de la matriz.
-
-Para configurar los parámetros de la grilla y los bloques de manera que mantengan este patrón de acceso coalescente, podemos utilizar un tamaño de bloque de (32, 32) y ajustar la dimensión de la grilla según el tamaño de la matriz.*/
+Por ejemplo, podemos reducir el tamaño del bloque para que menos hilos estén accediendo a la memoria al mismo tiempo, lo que puede ayudar a
+ reducir la fragmentación. Sin embargo, esta optimización puede reducir el grado de paralelismo, por lo que es importante encontrar un equilibrio
+  adecuado.*/
