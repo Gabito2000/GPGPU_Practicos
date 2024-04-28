@@ -22,7 +22,7 @@ __global__ void matrixVectorMultiplication(int *A, int *v, int *x, int numRows) 
     for (int j = 0; j < 256; j += TILE_WIDTH) {
         // Load a tile of the matrix into shared memory
         int tile_start = i * 256 + j;
-        int tile_end = min(tile_start + TILE_WIDTH, 256);
+        int tile_end = min(tile_start + TILE_WIDTH, 256); //min es cuda operation así que no debería de dar porblemas cuando se trabaja con la gpu
         for (int k = tile_start; k < tile_end; ++k) {
             sum += A[k] * shared_v[k - i * 256];
         }
