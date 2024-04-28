@@ -80,4 +80,5 @@ int main_original() {
 int main() {
     for (int i = 0; i < ITERATIONS; i++) {
         main_original();
+    }
 }
