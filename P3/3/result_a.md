@@ -1,3 +1,3 @@
-Tiempo de ejecución del kernel: 0.249856 ms
+Tiempo de ejecución del kernel: 0.277568 ms
 Errors: 
 no error

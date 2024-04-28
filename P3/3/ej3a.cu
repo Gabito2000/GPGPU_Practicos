@@ -4,12 +4,32 @@
 #define BLOCK_SIZE 256
 
 __global__ void matrixVectorMultiplication(int *A, int *v, int *x, int numRows) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    __shared__ int shared_v[256];
     
-    for (int j = 0; j < 256; ++j) {
-        // x[i] += A[i * 256 + j] * v[j];
-        atomicAdd(&x[i], A[i * 256 + j] * v[j]);
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int tx = threadIdx.x;
+    
+    // Load vector v into shared memory
+    if (tx < 256)
+        shared_v[tx] = v[tx];
+    
+    __syncthreads();
+    
+    // Perform matrix-vector multiplication
+    int sum = 0;
+    for (int j = 0; j < 256; j += TILE_WIDTH) {
+        // Load a tile of the matrix into shared memory
+        int tile_start = i * 256 + j;
+        int tile_end = min(tile_start + TILE_WIDTH, 256);
+        for (int k = tile_start; k < tile_end; ++k) {
+            sum += A[k] * shared_v[k - i * 256];
+        }
+        __syncthreads();
     }
+    
+    // Accumulate the result
+    if (i < numRows)
+        atomicAdd(&x[i], sum);
 }
 
 

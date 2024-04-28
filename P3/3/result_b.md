@@ -1,3 +1,3 @@
-Tiempo de ejecución del kernel: 0.000000 ms
+Tiempo de ejecución del kernel: 0.203552 ms
 Errors: 
-an illegal memory access was encountered
+no error
