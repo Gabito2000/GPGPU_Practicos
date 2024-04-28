@@ -81,7 +81,7 @@ int main() {
 
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
-    printf("Tiempo de ejecución del kernel: %f ms\n", milliseconds);
+    // printf("Tiempo de ejecución del kernel: %f ms\n", milliseconds);
 
     // Copiar vector resultado x desde el dispositivo al host
     cudaMemcpy(h_x, d_x, numRows * sizeof(int), cudaMemcpyDeviceToHost);
@@ -94,9 +94,9 @@ int main() {
     cudaFree(d_v);
     cudaFree(d_x);
 
-    //print cuda errors
-    printf("Errors: \n");
-    printf("%s\n", cudaGetErrorString(cudaGetLastError()));
+    // print cuda errors
+    // printf("Errors: \n");
+    // printf("%s\n", cudaGetErrorString(cudaGetLastError()));
 
     return 0;
 }

@@ -26,14 +26,14 @@ int main() {
     for (int i = 0; i < matrixSize; ++i) {
         h_matrix[i] = i;
     }
-    printf("Matriz original: \n");
-    for (int i = 0; i < height; ++i) {
-        for (int j = 0; j < width; ++j) {
-            printf("%d ", h_matrix[i * width + j]);
-        }
-        printf("\n");
-    }
-    printf("--------\n");
+    // printf("Matriz original: \n");
+    // for (int i = 0; i < height; ++i) {
+    //     for (int j = 0; j < width; ++j) {
+    //         printf("%d ", h_matrix[i * width + j]);
+    //     }
+    //     printf("\n");
+    // }
+    // printf("--------\n");
 
     // Reservar memoria en el dispositivo
     int *d_matrix;
@@ -61,19 +61,19 @@ int main() {
 
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
-    printf("Tiempo de ejecución del kernel: %f ms\n", milliseconds);
+    // printf("Tiempo de ejecución del kernel: %f ms\n", milliseconds);
 
     // Copiar matriz resultante desde el dispositivo al host
     cudaMemcpy(h_matrix, d_matrix, matrixSize * sizeof(int), cudaMemcpyDeviceToHost);
 
-    printf("Resultado: \n");
-    for (int i = 0; i < height; ++i) {
-        for (int j = 0; j < width; ++j) {
-            printf("%d ", h_matrix[i * width + j]);
-        }
-        printf("\n");
-    }
-    printf("\n");
+    // printf("Resultado: \n");
+    // for (int i = 0; i < height; ++i) {
+    //     for (int j = 0; j < width; ++j) {
+    //         printf("%d ", h_matrix[i * width + j]);
+    //     }
+    //     printf("\n");
+    // }
+    // printf("\n");
 
     // Liberar memoria
     free(h_matrix);

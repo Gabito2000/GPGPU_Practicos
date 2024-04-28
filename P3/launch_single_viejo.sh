@@ -15,14 +15,11 @@
 #SBATCH --mail-user=gabriel.kryger@fing.edu.uy
 #SBATCH -o consola.out
 
-export PATH=$PATH:/usr/local/cuda/bin
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
+export PATH=$PATH:/usr/local/cuda-12.1/bin
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-12.1/lib64
 
 # Compilar el programa CUDA
 nvcc ej1a.cu -o ej1a.out
 
 # Ejecutar el programa CUDA con el archivo secreto.txt como argumento
-./ej1a.out secreto.txt
-
-
-
+./ej1a.out

@@ -41,7 +41,7 @@ int main() {
     for (int i = 0; i < matrixSize; ++i) {
         h_inputMatrix[i] = i;
     }
-    printf("Time for block size, time in ns, ITERATIONS: \n");
+    // printf("Time for block size, time in ns, ITERATIONS: \n");
 
     for (int i = 0; i < sizeof(block_sizes) / sizeof(int); i++) {
         
@@ -78,7 +78,7 @@ int main() {
 
         uint64_t end = get_nanoseconds();
 
-        printf("%d, %lu, %d\n", block_sizes[i], (end - start) / ITERATIONS, ITERATIONS);
+        // printf("%d, %lu, %d\n", block_sizes[i], (end - start) / ITERATIONS, ITERATIONS);
     }
 
     return 0;
