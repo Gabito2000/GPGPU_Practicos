@@ -1,12 +1,14 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+#define BLOCK_SIZE 256
+
 __global__ void matrixVectorMultiplication(int *A, int *v, int *x, int numRows) {
-    int row = blockIdx.x * blockDim.x + threadIdx.x;
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
     
-    if (row < numRows) {
-        int sum = 0;
-        for (int i = 0; i < 256; ++i) {
-            sum += A[row * 256 + i] * v[i];
-        }
-        x[row] = sum;
+    for (int j = 0; j < 256; ++j) {
+        // x[i] += A[i * 256 + j] * v[j];
+        atomicAdd(&x[i], A[i * 256 + j] * v[j]);
     }
 }
 
@@ -23,12 +25,12 @@ int main() {
     int *h_v = (int*)malloc(vectorSize * sizeof(int));
     int *h_x = (int*)malloc(numRows * sizeof(int));
 
-    // Inicializar matriz A y vector v (puedes hacerlo aleatoriamente o con valores específicos)
+    // Inicializar matriz A y vector v
     for (int i = 0; i < matrixSize; ++i) {
-        h_A[i] = i % 10; // ejemplo de inicialización
+        h_A[i] = i;
     }
     for (int i = 0; i < vectorSize; ++i) {
-        h_v[i] = i % 5; // ejemplo de inicialización
+        h_v[i] = i;
     }
 
     // Reservar memoria en el dispositivo
@@ -42,8 +44,7 @@ int main() {
     cudaMemcpy(d_v, h_v, vectorSize * sizeof(int), cudaMemcpyHostToDevice);
 
     // Definir tamaño de bloque y de la grilla
-    int blockSize = 256; // Utilizamos el mismo tamaño de bloque que el número de columnas de la matriz A
-    int gridSize = (numRows + blockSize - 1) / blockSize;
+    int gridSize = (numRows + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
     // Registrar el tiempo de ejecución
     cudaEvent_t start, stop;
@@ -53,7 +54,7 @@ int main() {
     cudaEventRecord(start);
     
     // Ejecutar kernel
-    matrixVectorMultiplication<<<gridSize, blockSize>>>(d_A, d_v, d_x, numRows);
+    matrixVectorMultiplication<<<gridSize, BLOCK_SIZE>>>(d_A, d_v, d_x, numRows);
 
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
@@ -72,6 +73,10 @@ int main() {
     cudaFree(d_A);
     cudaFree(d_v);
     cudaFree(d_x);
+
+    //print cuda errors
+    printf("Errors: \n");
+    printf("%s\n", cudaGetErrorString(cudaGetLastError()));
 
     return 0;
 }
