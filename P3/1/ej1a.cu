@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 #define BLOCK_SIZE 32
+#define ITERATIONS 10
 
 __global__ void transposeMatrix(int *inputMatrix, int *outputMatrix, int width, int height) {
     int globalIdx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -14,7 +15,7 @@ __global__ void transposeMatrix(int *inputMatrix, int *outputMatrix, int width, 
     }
 }
 
-int main() {
+int main_original() {
     // Define matrix dimensions
     int width = 1024; 
     int height = 1024;
@@ -74,4 +75,9 @@ int main() {
     free(h_outputMatrix);
 
     return 0;
+}
+
+int main() {
+    for (int i = 0; i < ITERATIONS; i++) {
+        main_original();
 }

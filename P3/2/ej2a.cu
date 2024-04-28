@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 #define BLOCK_SIZE 64
+#define ITERATIONS 10
 
 __global__ void addNeighborElement(int *matrix, int width, int height) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;    
@@ -13,7 +14,7 @@ __global__ void addNeighborElement(int *matrix, int width, int height) {
 }
 
 
-int main() {
+int main_original() {
     // Definir dimensiones de la matriz
     int width = 10;
     int height = 10;
@@ -80,4 +81,9 @@ int main() {
     cudaFree(d_matrix);
 
     return 0;
+}
+
+int main() {
+    for (int i = 0; i < ITERATIONS; i++) {
+        main_original();
 }

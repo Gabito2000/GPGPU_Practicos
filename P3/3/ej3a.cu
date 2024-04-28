@@ -2,6 +2,7 @@
 #include <stdlib.h>
 
 #define BLOCK_SIZE 256
+#define ITERATIONS 10
 
 __global__ void matrixVectorMultiplication(int *A, int *v, int *x, int numRows) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -12,7 +13,7 @@ __global__ void matrixVectorMultiplication(int *A, int *v, int *x, int numRows) 
     }
 }
 
-int main() {
+int main_original() {
     // Definir dimensiones de la matriz A y del vector v
     int numRows = 10240;
     int numCols = 256;
@@ -78,4 +79,10 @@ int main() {
     // printf("%s\n", cudaGetErrorString(cudaGetLastError()));
 
     return 0;
+}
+
+
+int main() {
+    for (int i = 0; i < ITERATIONS; i++) {
+        main_original();
 }

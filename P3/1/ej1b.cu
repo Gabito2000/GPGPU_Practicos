@@ -5,8 +5,9 @@
 #include <stdint.h>
 
 #define BLOCK_SIZE 32
-
 #define ITERATIONS 10
+
+// #define ITERATIONS 10
 
 __global__ void transposeMatrix(int *inputMatrix, int *outputMatrix, int width, int height) {
     int globalIdx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -27,7 +28,7 @@ uint64_t get_nanoseconds() {
 }
 
 
-int main() {
+int main_original() {
     //define block sizes
     int block_sizes[] = {16, 32, 64, 128, 256, 512, 1024, 1, 3, 27, 59};
 
@@ -46,7 +47,7 @@ int main() {
     for (int i = 0; i < sizeof(block_sizes) / sizeof(int); i++) {
         
         uint64_t start = get_nanoseconds();
-        for (int j = 0; j < ITERATIONS; j++) {
+        // for (int j = 0; j < ITERATIONS; j++) {
             // Allocate memory for the matrices on the host
             int *h_outputMatrix = (int*)malloc(matrixSize * sizeof(int));
 
@@ -74,7 +75,7 @@ int main() {
             // Free host memory
             cudaFree(d_inputMatrix);
             free(h_outputMatrix);
-        }
+        // }
 
         uint64_t end = get_nanoseconds();
 
@@ -82,4 +83,10 @@ int main() {
     }
 
     return 0;
+}
+
+
+int main() {
+    for (int i = 0; i < ITERATIONS; i++) {
+        main_original();
 }
