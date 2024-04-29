@@ -1,7 +1,7 @@
 #include <stdio.h>
 
-#define BLOCK_SIZE 32
 #define ITERATIONS 10
+#define WARPSIZE 32
 
 __global__ void transposeMatrix(int *inputMatrix, int *outputMatrix, int width, int height) {
     int globalIdx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -15,7 +15,9 @@ __global__ void transposeMatrix(int *inputMatrix, int *outputMatrix, int width, 
     }
 }
 
-int main_original() {
+int main_original(int argc, char **argv) {
+    int BLOCK_SIZE_x = argc > 1 ? atoi(argv[1]) : 32;
+    int BLOCK_SIZE_y = argc > 2 ? atoi(argv[2]) : BLOCK_SIZE_x;
     // Define matrix dimensions
     int width = 1024; 
     int height = 1024;
@@ -48,8 +50,8 @@ int main_original() {
     cudaMemcpy(d_inputMatrix, h_inputMatrix, matrixSize * sizeof(int), cudaMemcpyHostToDevice);
 
     // Define grid and block dimensions 
-    dim3 blockSize(BLOCK_SIZE);
-    dim3 numBlocks(BLOCK_SIZE);
+    dim3 blockSize(BLOCK_SIZE_x, BLOCK_SIZE_y);
+    dim3 numBlocks(32);
 
     // Launch kernel
     transposeMatrix<<<numBlocks, blockSize>>>(d_inputMatrix, d_outputMatrix, width, height);
@@ -74,12 +76,13 @@ int main_original() {
     free(h_inputMatrix);
     free(h_outputMatrix);
 
-
+    printf("CUDA ERROR: %s\n", cudaGetErrorString(cudaGetLastError()));
     return 0;
 }
 
-int main() {
+int main(int argc, char **argv) {
     for (int i = 0; i < ITERATIONS; i++) {
-        main_original();
+        main_original( argc, argv );
+        cudaDeviceSynchronize();
     }
 }

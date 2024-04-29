@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 #define BLOCK_SIZE 32
-#define ITERATIONS 500
+#define ITERATIONS 100
 
 
 __global__ void transposeMatrix(int *inputMatrix, int *outputMatrix, int width, int height) {
@@ -37,15 +37,18 @@ int main() {
     int height = 1024;
     int matrixSize = width * height;
     
-    int *h_inputMatrix = (int*)malloc(matrixSize * sizeof(int));
-    for (int i = 0; i < matrixSize; ++i) {
-        h_inputMatrix[i] = i;
-    }
+    
     // printf("Time for block size, time in ns, ITERATIONS: \n");
 
     for (int i = 0; i < sizeof(block_sizes) / sizeof(int); i++) {
+        int *h_inputMatrix = (int*)malloc(matrixSize * sizeof(int));
+        for (int aux = 0; aux < matrixSize; ++aux) {
+            h_inputMatrix[aux] = aux;
+        }
         
-        uint64_t start = get_nanoseconds();
+        // declare acc time
+        uint64_t acc_time = 0;
+
         for (int j = 0; j < ITERATIONS; j++) {
             // Allocate memory for the matrices on the host
             int *h_outputMatrix = (int*)malloc(matrixSize * sizeof(int));
@@ -62,11 +65,13 @@ int main() {
             // // dim3 blockSize(BLOCK_SIZE);
             // // dim3 numBlocks(NUM_BLOCKS);
             dim3 blockSize(block_sizes[i]);
-            dim3 numBlocks(block_sizes[i]);
+            dim3 numBlocks(32);
 
             // Launch kernel
+            uint64_t start = get_nanoseconds();
             transposeMatrix<<<numBlocks, blockSize>>>(d_inputMatrix, d_outputMatrix, width, height);
-
+            uint64_t end = get_nanoseconds();
+            acc_time += end - start;
             // Copy result back to host
             cudaMemcpy(h_outputMatrix, d_outputMatrix, matrixSize * sizeof(int), cudaMemcpyDeviceToHost);
 
@@ -76,12 +81,16 @@ int main() {
             // Free host memory
             cudaFree(d_inputMatrix);
             free(h_outputMatrix);
+
+            cudaDeviceReset();
         }
 
-        uint64_t end = get_nanoseconds();
+        
 
-        printf("%d, %lu, %d\n", block_sizes[i], (end - start) / ITERATIONS, ITERATIONS);
+        // Free host memory
+        free(h_inputMatrix);
+        printf("%d, %lu, %d\n", block_sizes[i], (acc_time) / ITERATIONS, ITERATIONS);
     }
-
+    printf("cudaError: %s\n", cudaGetErrorString(cudaGetLastError()));
     return 0;
 }
