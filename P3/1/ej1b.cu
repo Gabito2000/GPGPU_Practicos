@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-#define BLOCK_SIZE 64
+#define BLOCK_SIZE 1024
 #define ITERATIONS 10
 
 __global__ void transposeMatrix(int *inputMatrix, int *outputMatrix, int width, int height) {
@@ -48,11 +48,11 @@ int main_original() {
     cudaMemcpy(d_inputMatrix, h_inputMatrix, matrixSize * sizeof(int), cudaMemcpyHostToDevice);
 
     // Define grid and block dimensions
-    dim3 blockSize(BLOCK_SIZE, BLOCK_SIZE);
-    dim3 gridSize((width + BLOCK_SIZE - 1) / BLOCK_SIZE, (height + BLOCK_SIZE - 1) / BLOCK_SIZE);
+    dim3 blockSize(BLOCK_SIZE);
+    dim3 numBlocks(BLOCK_SIZE);
 
     // Launch kernel
-    transposeMatrix<<<gridSize, blockSize>>>(d_inputMatrix, d_outputMatrix, width, height);
+    transposeMatrix<<<numBlocks, blockSize>>>(d_inputMatrix, d_outputMatrix, width, height);
 
     // Copy result back to host
     cudaMemcpy(h_outputMatrix, d_outputMatrix, matrixSize * sizeof(int), cudaMemcpyDeviceToHost);

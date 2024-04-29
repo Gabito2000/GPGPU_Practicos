@@ -59,11 +59,13 @@ int main() {
             cudaMemcpy(d_inputMatrix, h_inputMatrix, matrixSize * sizeof(int), cudaMemcpyHostToDevice);
 
             // Define grid and block dimensions
-            dim3 blockSize(block_sizes[i], block_sizes[i]);
-            dim3 gridSize((width + block_sizes[i] - 1) / block_sizes[i], (height + block_sizes[i] - 1) / block_sizes[i]);
+            // // dim3 blockSize(BLOCK_SIZE);
+            // // dim3 numBlocks(NUM_BLOCKS);
+            dim3 blockSize(block_sizes[i]);
+            dim3 numBlocks(block_sizes[i]);
 
             // Launch kernel
-            transposeMatrix<<<gridSize, blockSize>>>(d_inputMatrix, d_outputMatrix, width, height);
+            transposeMatrix<<<numBlocks, blockSize>>>(d_inputMatrix, d_outputMatrix, width, height);
 
             // Copy result back to host
             cudaMemcpy(h_outputMatrix, d_outputMatrix, matrixSize * sizeof(int), cudaMemcpyDeviceToHost);

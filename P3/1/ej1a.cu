@@ -47,12 +47,12 @@ int main_original() {
     // Copy input matrix from host to device
     cudaMemcpy(d_inputMatrix, h_inputMatrix, matrixSize * sizeof(int), cudaMemcpyHostToDevice);
 
-    // Define grid and block dimensions
-    dim3 blockSize(BLOCK_SIZE, BLOCK_SIZE);
-    dim3 gridSize((width + BLOCK_SIZE - 1) / BLOCK_SIZE, (height + BLOCK_SIZE - 1) / BLOCK_SIZE);
+    // Define grid and block dimensions 
+    dim3 blockSize(BLOCK_SIZE);
+    dim3 numBlocks(BLOCK_SIZE);
 
     // Launch kernel
-    transposeMatrix<<<gridSize, blockSize>>>(d_inputMatrix, d_outputMatrix, width, height);
+    transposeMatrix<<<numBlocks, blockSize>>>(d_inputMatrix, d_outputMatrix, width, height);
 
     // Copy result back to host
     cudaMemcpy(h_outputMatrix, d_outputMatrix, matrixSize * sizeof(int), cudaMemcpyDeviceToHost);
@@ -73,6 +73,7 @@ int main_original() {
     // Free host memory
     free(h_inputMatrix);
     free(h_outputMatrix);
+
 
     return 0;
 }
