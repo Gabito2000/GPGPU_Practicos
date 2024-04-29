@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 #define BLOCK_SIZE 32
-#define ITERATIONS 10
+#define ITERATIONS 500
 
 
 __global__ void transposeMatrix(int *inputMatrix, int *outputMatrix, int width, int height) {
@@ -27,9 +27,9 @@ uint64_t get_nanoseconds() {
 }
 
 
-int main_original() {
+int main() {
     //define block sizes
-    int block_sizes[] = {16, 32, 64, 128, 256, 512, 1024, 1, 3, 27, 59};
+    int block_sizes[] = {8, 16, 32, 64, 128, 256, 512, 1024};
 
 
     // Define matrix dimensions
@@ -82,11 +82,4 @@ int main_original() {
     }
 
     return 0;
-}
-
-
-int main() {
-    for (int i = 0; i < ITERATIONS; i++) {
-        main_original();
-    }
 }
