@@ -15,7 +15,7 @@ uint64_t get_nanoseconds() {
 }
 
 __global__ void transposeMatrix(int *inputMatrix, int *outputMatrix) {
-    __shared__ float tile[TILE_DIM][TILE_DIM+1];
+    __shared__ float tile[TILE_DIM][TILE_DIM+1]; // +1 to avoid bank conflicts
 
     int x = blockIdx.x * TILE_DIM + threadIdx.x;
     int y = blockIdx.y * TILE_DIM + threadIdx.y;

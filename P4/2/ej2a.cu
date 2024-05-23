@@ -202,6 +202,8 @@
 #define BLOCK_SIZE_x 1024
 #define BLOCK_SIZE_y 1
 
+#define ITERATIONS 100
+
 __global__ void histo_kernel_shared(int *d_image, int *d_histogram, int matrixSize) {
     __shared__ int histo_private[HISTO_SIZE];
 
@@ -228,7 +230,7 @@ __global__ void histo_kernel_shared(int *d_image, int *d_histogram, int matrixSi
     }
 }
 
-int main() {
+int main_nuevo() {
     int *h_image = (int *)malloc(WIDTH * HEIGHT * sizeof(int));
     int *d_image, *d_histogram;
     int h_histogram[HISTO_SIZE] = {0};
@@ -262,5 +264,12 @@ int main() {
     cudaFree(d_histogram);
     free(h_image);
 
+    return 0;
+}
+
+int main( int argc, char **argv ) {
+    for (int i = 0; i < ITERATIONS; i++) {
+        main_nuevo();
+    }
     return 0;
 }

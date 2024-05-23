@@ -189,8 +189,6 @@
 //     fclose(f);
 // }
 
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <cuda_runtime.h>
@@ -198,110 +196,84 @@
 
 #define WIDTH 3840
 #define HEIGHT 2160
+
 #define HISTO_SIZE 256
-// #define HISTO_SIZE_PARTIAL 1024 // this should be block size so it optimizes the shared memory usage
-#define BLOCK_SIZE 1024
+
+#define BLOCK_SIZE_x 1024
+#define BLOCK_SIZE_y 1
 
 #define ITERATIONS 100
 
-__global__ void histo_kernel_shared(int *d_image, int *d_histogram_partial, int matrixSize) {
-    __shared__ int histo_private[HISTO_SIZE];
-
-    //se usa threadIdx.x  ya que habrá 1 en cada posisión de HISTO_SIZE por bloque lo que nos permite asegurarnos de que no sumamos cosas de más y no realizamos operaciones sin sentido
-
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
-
-    // Inicializar el histograma privado en memoria compartida
-    if (threadIdx.x < HISTO_SIZE) {
-        histo_private[threadIdx.x] = 0;
-    }
-    __syncthreads();
-
-    // Calcular el histograma local en memoria compartida
-    if (tid < matrixSize) {
-        atomicAdd(&histo_private[d_image[tid]], 1);
-    }
+__global__ void count_occurrences_kernel(int *d_image, int *d_occurrences)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = blockDim.x * gridDim.x;
     
-    __syncthreads();
-
-    // Actualizar el histograma global
-    if (threadIdx.x < HISTO_SIZE) {
-        atomicAdd(&d_histogram_partial[threadIdx.x], histo_private[threadIdx.x]);
+    for (int i = idx; i < length; i += stride) {
+        atomicAdd(&d_occurrences[d_image[i]], 1);
     }
 }
 
-__global__ void add_histo(int *d_histogram_partial, int *d_histogram) {
-    __shared__ int histo_private[HISTO_SIZE];
+int main_viejo () {
+    int *h_image;
+    int *d_image;
+    int *h_occurrences;
+    int *d_occurrences;
+    unsigned int size;
 
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    // reservar memoria para la imagen
+    h_image = (int *)malloc(WIDTH * HEIGHT * sizeof(int));
 
-    // Inicializar el histograma privado en memoria compartida
-    if (threadIdx.x < HISTO_SIZE) {
-        histo_private[threadIdx.x] = 0;
-    }
-
-    __syncthreads();
-
-    // Calcular el histograma local en memoria compartida
-    if (tid < HISTO_SIZE) {
-        atomicAdd(&histo_private[threadIdx.x], d_histogram_partial[tid]);
-    }
-
-    __syncthreads();
-
-    // Actualizar el histograma global, como estamos trabajando con un solo bloque, no es necesario usar atomicAdd pero lo hacemos para que sea más general.
-    if (threadIdx.x < HISTO_SIZE) {
-        atomicAdd(&d_histogram[threadIdx.x], histo_private[threadIdx.x]);
-    }
-}
-
-int main_nuevo() {
-    int *h_image = (int *)malloc(WIDTH * HEIGHT * sizeof(int));
-    int *d_image, *d_histogram, *d_histogram_partial;
-    int h_histogram[HISTO_SIZE] = {0};
-
-    // Inicializar imagen con valores aleatorios
+    // Inicializar la imagen
     for (int i = 0; i < WIDTH * HEIGHT; i++) {
-        h_image[i] = i % HISTO_SIZE;
+        h_image[i] = rand() % HISTO_SIZE;
     }
 
+    // reservar memoria en la GPU
     cudaMalloc((void**)&d_image, WIDTH * HEIGHT * sizeof(int));
-    cudaMalloc((void**)&d_histogram, BLOCK_SIZE * sizeof(int));
-    cudaMalloc((void**)&d_histogram_partial, HISTO_SIZE * sizeof(int));
+    cudaMalloc((void**)&d_occurrences, HISTO_SIZE * sizeof(int));
+
+    // copiar los datos de entrada a la GPU
     cudaMemcpy(d_image, h_image, WIDTH * HEIGHT * sizeof(int), cudaMemcpyHostToDevice);
-    cudaMemset(d_histogram, 0, BLOCK_SIZE * sizeof(int));
-    cudaMemset(d_histogram_partial, 0, HISTO_SIZE * sizeof(int));
 
+    // Inicializar el vector de ocurrencias con ceros
+    cudaMemset(d_occurrences, 0, HISTO_SIZE * sizeof(int));
 
+    // Configurar la grilla y lanzar el kernel de conteo de ocurrencias
+    dim3 blockSize(BLOCK_SIZE_x, BLOCK_SIZE_y);
+    dim3 numBlocks(WIDTH * HEIGHT / BLOCK_SIZE_x, 1);
+    
+    count_occurrences_kernel<<<numBlocks, blockSize>>>(d_image, d_occurrences);
 
-    dim3 blockSize(BLOCK_SIZE);
-    dim3 numBlocks(WIDTH * HEIGHT + BLOCK_SIZE - 1) / BLOCK_SIZE); //SO it does all the work.
+    // Retornar los datos de las ocurrencias a la CPU
+    h_occurrences = (int *)malloc(HISTO_SIZE * sizeof(int));
+    cudaMemcpy(h_occurrences, d_occurrences, HISTO_SIZE * sizeof(int), cudaMemcpyDeviceToHost);
 
-    histo_kernel_shared_part<<<numBlocks, blockSize>>>(d_image, d_histogram_partial, WIDTH*HEIGHT);
-
-    cudaDeviceSynchronize();
-
-    add_histo<<<1, BLOCK_SIZE>>>(d_histogram_partial, d_histogram);
-
-
-
-
-    cudaMemcpy(h_histogram, d_histogram, HISTO_SIZE * sizeof(int), cudaMemcpyDeviceToHost);
-
+    // Imprimir las ocurrencias de cada caracter
     for (int i = 0; i < HISTO_SIZE; i++) {
-        printf("Bin %d: %d\n", i, h_histogram[i]);
+        if (h_occurrences[i] > 0) {
+            printf("Caracter '%c': %d ocurrencias\n", (char)i, h_occurrences[i]);
+        }
     }
 
+    // Liberar la memoria en la GPU
     cudaFree(d_image);
-    cudaFree(d_histogram);
+    cudaFree(d_occurrences);
+
+    // Liberar la memoria en la CPU
     free(h_image);
+    free(h_occurrences);
 
     return 0;
 }
 
 int main( int argc, char **argv ) {
     for (int i = 0; i < ITERATIONS; i++) {
-        main_nuevo();
+        main_viejo();
     }
     return 0;
 }
+
+
+
+
