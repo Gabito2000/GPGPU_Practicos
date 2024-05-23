@@ -3,8 +3,10 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-#define ITERATIONS 10
+#define ITERATIONS 100
 #define WARPSIZE 32
+#define BLOCK_SIZE_x 32
+#define BLOCK_SIZE_y 1
 
 uint64_t get_nanoseconds() {
     struct timespec ts;
@@ -12,7 +14,8 @@ uint64_t get_nanoseconds() {
     return ((uint64_t)ts.tv_sec * 1000000000) + ts.tv_nsec;
 }
 
-__global__ void transposeMatrix(int *inputMatrix, int *outputMatrix, int width, int height) {
+
+__global__ void transposeMatrix_viejo(int *inputMatrix, int *outputMatrix, int width, int height) {
     int globalIdx = blockIdx.x * blockDim.x + threadIdx.x;
     int globalIdy = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -24,13 +27,14 @@ __global__ void transposeMatrix(int *inputMatrix, int *outputMatrix, int width, 
     }
 }
 
-int main_original(int argc, char **argv) {
-    int BLOCK_SIZE_x = 32;
-    int BLOCK_SIZE_y = 1;
-
+int main_viejo(int argc, char **argv) {
     int width = 1024; 
     int height = 1024;
     int matrixSize = width * height;
+
+    int BLOCK_SIZE = BLOCK_SIZE_x * BLOCK_SIZE_y;
+
+    int GRID_SIZE = (matrixSize + BLOCK_SIZE - 1) / BLOCK_SIZE; // ceil(matrixSize / BLOCK_SIZE) so that the grid is big enough to cover the whole matrix
 
     int *h_i = (int*)malloc(matrixSize * sizeof(int));
     int *h_o = (int*)malloc(matrixSize * sizeof(int));
@@ -39,15 +43,6 @@ int main_original(int argc, char **argv) {
         h_i[i] = i;
     }
 
-    // Print input matrix
-    // printf("Input matrix:\n");
-    // for (int i = 0; i < height; ++i) {
-    //     for (int j = 0; j < width; ++j) {
-    //         printf("%d ", h_i[i * width + j]);
-    //     }
-    //     printf("\n");
-    // }
-
     int *d_i, *d_o;
     cudaMalloc((void**)&d_i, matrixSize * sizeof(int));
     cudaMalloc((void**)&d_o, matrixSize * sizeof(int));
@@ -55,20 +50,11 @@ int main_original(int argc, char **argv) {
     cudaMemcpy(d_i, h_i, matrixSize * sizeof(int), cudaMemcpyHostToDevice);
 
     dim3 blockSize(BLOCK_SIZE_x, BLOCK_SIZE_y);
-    dim3 numBlocks(32);
+    dim3 numBlocks(GRID_SIZE);
 
-    transposeMatrix<<<numBlocks, blockSize>>>(d_i, d_o, width, height);
+    transposeMatrix_viejo<<<numBlocks, blockSize>>>(d_i, d_o, width, height);
 
     cudaMemcpy(h_o, d_o, matrixSize * sizeof(int), cudaMemcpyDeviceToHost);
-
-    // Print output matrix
-    // printf("Output matrix:\n");
-    // for (int i = 0; i < width; ++i) {
-    //     for (int j = 0; j < height; ++j) {
-    //         printf("%d ", h_o[i * height + j]);
-    //     }
-    //     printf("\n");
-    // }
 
     cudaFree(d_i);
     cudaFree(d_o);
@@ -81,14 +67,13 @@ int main_original(int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
-    uint64_t start, end;
-    start = get_nanoseconds();
-
+    uint64_t start = get_nanoseconds();
     for (int i = 0; i < ITERATIONS; i++) {
-        main_original( argc, argv );
-        cudaDeviceSynchronize();
+        main_viejo(argc, argv);
+        cudaDeviceReset();
     }
-
-    end = get_nanoseconds();
-    printf("Time: %lu ns\n", end - start);
+    uint64_t end = get_nanoseconds();
+    printf("Time: %lu ns\n", (end - start) / ITERATIONS);
+    
+    return 0;
 }
