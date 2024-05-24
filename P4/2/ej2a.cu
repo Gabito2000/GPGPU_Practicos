@@ -226,7 +226,7 @@ __global__ void histo_kernel_shared(int *d_image, int *d_histogram, int matrixSi
 
     // Actualizar el histograma global
     if (threadIdx.x < HISTO_SIZE) {
-        atomicAdd(&d_histogram[threadIdx.x], histo_private[threadIdx.x]);
+        atomicAdd(&d_histogram[threadIdx.x], histo_private[threadIdx.x]); //esto es asignar el valor de histo_private[threadIdx.x] a d_histogram[threadIdx.x]
     }
 }
 
@@ -247,8 +247,8 @@ int main_nuevo() {
 
 
     dim3 blockSize(BLOCK_SIZE_x, BLOCK_SIZE_y);
-    BLOCK_SIZE = BLOCK_SIZE_x * BLOCK_SIZE_y;
-    dim3 numBlocks(WIDTH * HEIGHT + BLOCK_SIZE - 1) / BLOCK_SIZE); //SO it does all the work.
+    int BLOCK_SIZE = BLOCK_SIZE_x * BLOCK_SIZE_y;
+    dim3 numBlocks((WIDTH * HEIGHT + BLOCK_SIZE - 1) / BLOCK_SIZE); //SO it does all the work.
 
 
 

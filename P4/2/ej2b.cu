@@ -197,6 +197,7 @@
 #include <iostream>
 
 #define WIDTH 3840
+#define WIDTH_WITH_PADDING 4096
 #define HEIGHT 2160
 #define HISTO_SIZE 256
 // #define HISTO_SIZE_PARTIAL 1024 // this should be block size so it optimizes the shared memory usage
@@ -204,59 +205,42 @@
 
 #define ITERATIONS 100
 
-__global__ void histo_kernel_shared(int *d_image, int *d_histogram_partial, int matrixSize) {
+__global__ void histo_kernel_shared_part(int *d_image, int *d_histogram_partial, int matrixSize) {
     __shared__ int histo_private[HISTO_SIZE];
 
     //se usa threadIdx.x  ya que habrá 1 en cada posisión de HISTO_SIZE por bloque lo que nos permite asegurarnos de que no sumamos cosas de más y no realizamos operaciones sin sentido
-
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
-    // Inicializar el histograma privado en memoria compartida
-    if (threadIdx.x < HISTO_SIZE) {
-        histo_private[threadIdx.x] = 0;
+    if (tid < HISTO_SIZE) {
+        histo_private[tid] = 0;
     }
-    __syncthreads();
 
-    // Calcular el histograma local en memoria compartida
+    __syncthreads();
+    
     if (tid < matrixSize) {
         atomicAdd(&histo_private[d_image[tid]], 1);
     }
-    
-    __syncthreads();
 
-    // Actualizar el histograma global
-    if (threadIdx.x < HISTO_SIZE) {
-        atomicAdd(&d_histogram_partial[threadIdx.x], histo_private[threadIdx.x]);
+    __syncthreads();
+    
+    //this is not depending on the top, is only coping the data to the shared memory efficiently
+    if (tid < WIDTH_WITH_PADDING * HEIGHT) {
+        d_histogram_partial[tid % (HISTO_SIZE * gridDim.x)] = histo_private[tid % HISTO_SIZE];
     }
 }
 
 __global__ void add_histo(int *d_histogram_partial, int *d_histogram) {
-    __shared__ int histo_private[HISTO_SIZE];
-
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
-
-    // Inicializar el histograma privado en memoria compartida
-    if (threadIdx.x < HISTO_SIZE) {
-        histo_private[threadIdx.x] = 0;
-    }
-
-    __syncthreads();
-
-    // Calcular el histograma local en memoria compartida
-    if (tid < HISTO_SIZE) {
-        atomicAdd(&histo_private[threadIdx.x], d_histogram_partial[tid]);
-    }
-
-    __syncthreads();
-
-    // Actualizar el histograma global, como estamos trabajando con un solo bloque, no es necesario usar atomicAdd pero lo hacemos para que sea más general.
-    if (threadIdx.x < HISTO_SIZE) {
-        atomicAdd(&d_histogram[threadIdx.x], histo_private[threadIdx.x]);
+    int tid = blockIdx.x * blockDim.x + threadIdx.x; //esto cómo es un solo bloque, es lo mismo que threadIdx.x
+    // add the partial histograms on the % HISTO_SIZE position
+    
+    // Sumar los histogramas parciales
+    for (int i = 0; i < num_blocks; i++) {
+        atomicAdd(&d_histogram[tid], d_histogram_partial[tid * num_blocks + i]);
     }
 }
 
 int main_nuevo() {
-    int *h_image = (int *)malloc(WIDTH * HEIGHT * sizeof(int));
+    int *h_image = (int *)malloc(WIDTH_WITH_PADDING * HEIGHT * sizeof(int));
     int *d_image, *d_histogram, *d_histogram_partial;
     int h_histogram[HISTO_SIZE] = {0};
 
@@ -265,33 +249,45 @@ int main_nuevo() {
         h_image[i] = i % HISTO_SIZE;
     }
 
-    cudaMalloc((void**)&d_image, WIDTH * HEIGHT * sizeof(int));
+    for (int i = WIDTH * HEIGHT; i < WIDTH_WITH_PADDING * HEIGHT; i++) {
+        h_image[i] = 0;
+    }
+
+    int NUM_BLOCKS = (WIDTH_WITH_PADDING * HEIGHT + BLOCK_SIZE - 1) / BLOCK_SIZE; //SO it does all the work.
+
+    cudaMalloc((void**)&d_image, WIDTH_WITH_PADDING * HEIGHT * sizeof(int));
     cudaMalloc((void**)&d_histogram, BLOCK_SIZE * sizeof(int));
-    cudaMalloc((void**)&d_histogram_partial, HISTO_SIZE * sizeof(int));
-    cudaMemcpy(d_image, h_image, WIDTH * HEIGHT * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMalloc((void**)&d_histogram_partial, HISTO_SIZE * sizeof(int) * NUM_BLOCKS);
+    
+    cudaMemcpy(d_image, h_image, WIDTH_WITH_PADDING * HEIGHT * sizeof(int), cudaMemcpyHostToDevice);
     cudaMemset(d_histogram, 0, BLOCK_SIZE * sizeof(int));
-    cudaMemset(d_histogram_partial, 0, HISTO_SIZE * sizeof(int));
+    cudaMemset(d_histogram_partial, 0, HISTO_SIZE * sizeof(int) * NUM_BLOCKS);
 
 
 
     dim3 blockSize(BLOCK_SIZE);
-    dim3 numBlocks(WIDTH * HEIGHT + BLOCK_SIZE - 1) / BLOCK_SIZE); //SO it does all the work.
+    dim3 numBlocks(NUM_BLOCKS); 
 
-    histo_kernel_shared_part<<<numBlocks, blockSize>>>(d_image, d_histogram_partial, WIDTH*HEIGHT);
+    histo_kernel_shared_part<<<numBlocks, blockSize>>>(d_image, d_histogram_partial, WIDTH_WITH_PADDING*HEIGHT);
+
+    int *h_histogram_partial = (int *)malloc(HISTO_SIZE * NUM_BLOCKS * sizeof(int));
+    cudaMemcpy(h_histogram_partial, d_histogram_partial, HISTO_SIZE * NUM_BLOCKS * sizeof(int), cudaMemcpyDeviceToHost);
 
     cudaDeviceSynchronize();
 
-    add_histo<<<1, BLOCK_SIZE>>>(d_histogram_partial, d_histogram);
+    // for (int i = 0; i < HISTO_SIZE * NUM_BLOCKS && i < 2000; i++) {
+    //     printf("Block %d, Bin %d: %d\n", i / HISTO_SIZE, i % HISTO_SIZE, h_histogram_partial[i]);
+    // }
 
 
-
+    add_histo<<<NUM_BLOCKS, BLOCK_SIZE>>>(d_histogram_partial, d_histogram);
 
     cudaMemcpy(h_histogram, d_histogram, HISTO_SIZE * sizeof(int), cudaMemcpyDeviceToHost);
 
     for (int i = 0; i < HISTO_SIZE; i++) {
         printf("Bin %d: %d\n", i, h_histogram[i]);
     }
-
+    printf("CUDA ERROR: %s\n", cudaGetErrorString(cudaGetLastError()));
     cudaFree(d_image);
     cudaFree(d_histogram);
     free(h_image);

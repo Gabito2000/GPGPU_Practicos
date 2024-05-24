@@ -209,7 +209,7 @@ __global__ void count_occurrences_kernel(int *d_image, int *d_occurrences)
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int stride = blockDim.x * gridDim.x;
     
-    for (int i = idx; i < length; i += stride) {
+    for (int i = idx; i < WIDTH * HEIGHT; i += stride) {
         atomicAdd(&d_occurrences[d_image[i]], 1);
     }
 }
@@ -219,14 +219,13 @@ int main_viejo () {
     int *d_image;
     int *h_occurrences;
     int *d_occurrences;
-    unsigned int size;
 
     // reservar memoria para la imagen
     h_image = (int *)malloc(WIDTH * HEIGHT * sizeof(int));
 
     // Inicializar la imagen
     for (int i = 0; i < WIDTH * HEIGHT; i++) {
-        h_image[i] = rand() % HISTO_SIZE;
+        h_image[i] = i % HISTO_SIZE;
     }
 
     // reservar memoria en la GPU
@@ -251,9 +250,7 @@ int main_viejo () {
 
     // Imprimir las ocurrencias de cada caracter
     for (int i = 0; i < HISTO_SIZE; i++) {
-        if (h_occurrences[i] > 0) {
-            printf("Caracter '%c': %d ocurrencias\n", (char)i, h_occurrences[i]);
-        }
+        printf("Bin %d: %d ocurrencias\n", i, h_occurrences[i]);
     }
 
     // Liberar la memoria en la GPU
