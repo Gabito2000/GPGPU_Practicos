@@ -63,6 +63,18 @@
         "xstring": "cpp",
         "xtr1common": "cpp",
         "xtree": "cpp",
-        "xutility": "cpp"
+        "xutility": "cpp",
+        "array": "cpp",
+        "deque": "cpp",
+        "unordered_map": "cpp",
+        "string_view": "cpp",
+        "ranges": "cpp",
+        "*.tcc": "cpp",
+        "cstdarg": "cpp",
+        "cwctype": "cpp",
+        "functional": "cpp",
+        "memory_resource": "cpp",
+        "numeric": "cpp",
+        "random": "cpp"
     }
 }
