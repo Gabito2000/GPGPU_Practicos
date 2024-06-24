@@ -188,7 +188,7 @@ int ordenar_filas2(int* RowPtrL, int* ColIdxL, VALUE_TYPE* Val, int n, int* iord
 
     // Copiar el resultado al host
     thrust::copy(d_indices.begin(), d_indices.end(), iorder);
-
+/*
     // Contar los niveles no vacíos
     thrust::pair<thrust::device_vector<LevelSizePair>::iterator, thrust::device_vector<int>::iterator> redu;
     thrust::device_vector<LevelSizePair> d_level_1(n);
@@ -197,7 +197,7 @@ int ordenar_filas2(int* RowPtrL, int* ColIdxL, VALUE_TYPE* Val, int n, int* iord
     int num_clases = std::distance(d_level_1.begin(),redu.first);
     thrust::transform( d_level_2.begin(), d_level_2.begin() + num_clases, d_level_1.begin(), d_level_2.begin(), transf_a_warps() );
     n_warps = thrust::reduce(d_level_2.begin(), d_level_2.begin() + num_clases, 0);
-
+*/
     return n_warps;
 }
 
@@ -315,10 +315,6 @@ int ordenar_filas( int* RowPtrL, int* ColIdxL, VALUE_TYPE * Val, int n, int* ior
             vect_size = 4;
         else vect_size = 5;
 
-        printf("i = %d\n", i);
-        printf("idepth = %d, vect_size = %d\n", idepth, vect_size);
-        printf("ivects[7 * idepth + vect_size] = %d\n", ivects[7*idepth + vect_size]);
-
         iorder[ ivects[ 7*idepth+vect_size ] ] = i;             
         ivect_size[ ivects[ 7*idepth+vect_size ] ] = ( vect_size == 6)? 0 : pow(2,vect_size);        
 
@@ -358,6 +354,7 @@ int ordenar_filas( int* RowPtrL, int* ColIdxL, VALUE_TYPE * Val, int n, int* ior
     return n_warps;
 
 }
+
 
 int main(int argc, char** argv) {
     // report precision of floating-point
