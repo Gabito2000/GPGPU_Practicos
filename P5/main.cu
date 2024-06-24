@@ -9,6 +9,7 @@
 #include <thrust/count.h>
 #include <thrust/functional.h>
 #include <cuda_runtime.h>
+#include <thrust/iterator/constant_iterator.h>
 
 
 #define WARP_PER_BLOCK 32
@@ -101,7 +102,27 @@ struct LevelSizePair {
     bool operator<(const LevelSizePair& other) const {
         return (level < other.level) || (level == other.level && size < other.size);
     }
+
+     __host__ __device__
+    bool operator==(const LevelSizePair& other) const {
+        return (level == other.level && size == other.size);
+    }
+
 };
+
+struct transf_a_warps {
+    __device__
+    int operator()(const int& cantidad, const LevelSizePair& clase ) const {
+        int size ;
+        if (clase.size == 6 ){
+            size = 1;
+        } else 
+            size = 1 << clase.size;
+        return  (cantidad * size + WARP_SIZE - 1 )/ WARP_SIZE;
+    }
+
+};
+
 
 // Definición del functor ComputeLevelSize
 struct ComputeLevelSize {
@@ -128,25 +149,15 @@ struct ComputeLevelSize {
             size = 3;
         else if (nnz_row <= 16)
             size = 4;
-        else if (nnz_row <= 32)
+        else
             size = 5;
-        else if (nnz_row <= 64)
-            size = 6;
-        else 
-            size = 7;
+
         return LevelSizePair{ level, size };
     }
 };
 
-// Functor para verificar si el nivel es no vacío
-struct IsNonEmptyLevel {
-    __host__ __device__
-    bool operator()(const LevelSizePair& pair) const {
-        return pair.size > 0;
-    }
-};
 
-int ordenar_filas(int* RowPtrL, int* ColIdxL, VALUE_TYPE* Val, int n, int* iorder) {
+int ordenar_filas2(int* RowPtrL, int* ColIdxL, VALUE_TYPE* Val, int n, int* iorder) {
 
     thrust::device_vector<unsigned int> d_niveles(n);
     thrust::device_vector<int> d_is_solved(n);
@@ -179,9 +190,173 @@ int ordenar_filas(int* RowPtrL, int* ColIdxL, VALUE_TYPE* Val, int n, int* iorde
     thrust::copy(d_indices.begin(), d_indices.end(), iorder);
 
     // Contar los niveles no vacíos
-    //n_warps = thrust::count_if(d_level_size_pairs.begin(), d_level_size_pairs.end(), IsNonEmptyLevel());
+    thrust::pair<thrust::device_vector<LevelSizePair>::iterator, thrust::device_vector<int>::iterator> redu;
+    thrust::device_vector<LevelSizePair> d_level_1(n);
+    thrust::device_vector<int> d_level_2(n);
+    redu = thrust::reduce_by_key(d_level_size_pairs.begin(), d_level_size_pairs.end(), thrust::constant_iterator<int> (1), d_level_1.begin(), d_level_2.begin());
+    int num_clases = std::distance(d_level_1.begin(),redu.first);
+    thrust::transform( d_level_2.begin(), d_level_2.begin() + num_clases, d_level_1.begin(), d_level_2.begin(), transf_a_warps() );
+    n_warps = thrust::reduce(d_level_2.begin(), d_level_2.begin() + num_clases, 0);
 
     return n_warps;
+}
+
+
+int ordenar_filas( int* RowPtrL, int* ColIdxL, VALUE_TYPE * Val, int n, int* iorder){
+    
+    int * niveles;
+
+    niveles = (int*) malloc(n * sizeof(int));
+
+    unsigned int * d_niveles;
+    int * d_is_solved;
+    
+    CUDA_CHK( cudaMalloc((void**) &(d_niveles) , n * sizeof(unsigned int)) )
+    CUDA_CHK( cudaMalloc((void**) &(d_is_solved) , n * sizeof(int)) )
+    
+    int num_threads = WARP_PER_BLOCK * WARP_SIZE;
+
+    int grid = ceil ((double)n*WARP_SIZE / (double)(num_threads));
+
+    CUDA_CHK( cudaMemset(d_is_solved, 0, n * sizeof(int)) )
+    CUDA_CHK( cudaMemset(d_niveles, 0, n * sizeof(unsigned int)) )
+
+
+    kernel_analysis_L<<< grid , num_threads, WARP_PER_BLOCK * (2*sizeof(int)) >>>( RowPtrL, 
+                                                                                   ColIdxL, 
+                                                                                   d_is_solved, 
+                                                                                   n, 
+                                                                                   d_niveles);
+
+    CUDA_CHK( cudaMemcpy(niveles, d_niveles, n * sizeof(int), cudaMemcpyDeviceToHost) )
+
+
+    /*Paralelice a partir de aquí*/
+
+
+    /* Obtener el máximo nivel */
+    int nLevs = niveles[0];
+    for (int i = 1; i < n; ++i)
+    {
+        nLevs = MAX(nLevs, niveles[i]);
+    }
+
+    int * RowPtrL_h = (int *) malloc( (n+1) * sizeof(int) );
+
+    CUDA_CHK( cudaMemcpy(RowPtrL_h, RowPtrL, (n+1) * sizeof(int), cudaMemcpyDeviceToHost) )
+
+    int * ivects = (int *) calloc( 7*nLevs, sizeof(int) );
+    int * ivect_size  = (int *) calloc(n,sizeof(int));
+
+
+    // Contar el número de filas en cada nivel y clase de equivalencia de tamaño
+
+    for(int i = 0; i< n; i++ ){
+        // El vector de niveles es 1-based y quiero niveles en 0-based
+        int lev = niveles[i]-1;
+        int nnz_row = RowPtrL_h[i+1]-RowPtrL_h[i]-1;
+        int vect_size;
+
+        if (nnz_row == 0)
+            vect_size = 6;
+        else if (nnz_row == 1)
+            vect_size = 0;
+        else if (nnz_row <= 2)
+            vect_size = 1;
+        else if (nnz_row <= 4)
+            vect_size = 2;
+        else if (nnz_row <= 8)
+            vect_size = 3;
+        else if (nnz_row <= 16)
+            vect_size = 4;
+        else vect_size = 5;
+
+        ivects[7*lev+vect_size]++;
+    }
+
+
+    /* Si se hace una suma prefija del vector se obtiene
+    el punto de comienzo de cada par tamaño, nivel en el vector
+    final ordenado */
+    int length = 7 * nLevs;
+	int old_val, new_val;
+	old_val = ivects[0];
+	ivects[0] = 0;
+	for (int i = 1; i < length; i++)
+	{
+		new_val = ivects[i];
+		ivects[i] = old_val + ivects[i - 1];
+		old_val = new_val;
+	}
+
+    /* Usando el offset calculado puedo recorrer la fila y generar un orden
+    utilizando el nivel (idepth) y la clase de tamaño (vect_size) como clave.
+    Esto se hace asignando a cada fila al punto apuntado por el offset e
+    incrementando por 1 luego 
+    iorder(ivects(idepth(j)) + offset(idepth(j))) = j */
+ 
+    for(int i = 0; i < n; i++ ){
+        
+        int idepth = niveles[i]-1;
+        int nnz_row = RowPtrL_h[i+1]-RowPtrL_h[i]-1;
+        int vect_size;
+
+        if (nnz_row == 0)
+            vect_size = 6;
+        else if (nnz_row == 1)
+            vect_size = 0;
+        else if (nnz_row <= 2)
+            vect_size = 1;
+        else if (nnz_row <= 4)
+            vect_size = 2;
+        else if (nnz_row <= 8)
+            vect_size = 3;
+        else if (nnz_row <= 16)
+            vect_size = 4;
+        else vect_size = 5;
+
+        printf("i = %d\n", i);
+        printf("idepth = %d, vect_size = %d\n", idepth, vect_size);
+        printf("ivects[7 * idepth + vect_size] = %d\n", ivects[7*idepth + vect_size]);
+
+        iorder[ ivects[ 7*idepth+vect_size ] ] = i;             
+        ivect_size[ ivects[ 7*idepth+vect_size ] ] = ( vect_size == 6)? 0 : pow(2,vect_size);        
+
+        ivects[ 7*idepth+vect_size ]++;
+    }
+
+    int ii = 1;
+    int filas_warp = 1;
+
+
+    /* Recorrer las filas en el orden dado por iorder y asignarlas a warps
+    Dos filas solo pueden ser asignadas a un mismo warp si tienen el mismo 
+    nivel y tamaño y si el warp tiene espacio suficiente */
+    for (int ctr = 1; ctr < n; ++ctr)
+    {
+
+        if( niveles[iorder[ctr]]!=niveles[iorder[ctr-1]] ||
+            ivect_size[ctr]!=ivect_size[ctr-1] ||
+            filas_warp * ivect_size[ctr] >= 32 ||
+            (ivect_size[ctr]==0 && filas_warp == 32) ){
+
+            filas_warp = 1;
+            ii++;
+        }else{
+            filas_warp++;
+        }
+    }
+
+    int n_warps = ii;
+
+    /*Termine aquí*/
+
+
+    CUDA_CHK( cudaFree(d_niveles) ) 
+    CUDA_CHK( cudaFree(d_is_solved) ) 
+
+    return n_warps;
+
 }
 
 int main(int argc, char** argv) {
@@ -405,50 +580,25 @@ int main(int argc, char** argv) {
 
     int* iorder = (int*)calloc(n, sizeof(int));
 
-
-
-
-
-    // Variables para los eventos de cronometraje
-    cudaEvent_t start, stop;
-
-    // Crear eventos
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-
-    // Registrar el evento de inicio
-    cudaEventRecord(start, 0);
-
-    // Llamar a la función ordenar_filas
+    // Llamar a la función ordenar_filas original
     int nwarps = ordenar_filas(RowPtrL_d, ColIdxL_d, Val_d, n, iorder);
 
-    // Registrar el evento de finalización
-    cudaEventRecord(stop, 0);
-
-    // Esperar a que el evento de finalización se complete
-    cudaEventSynchronize(stop);
-
-    // Calcular el tiempo transcurrido
-    float milliseconds = 0;
-    cudaEventElapsedTime(&milliseconds, start, stop);
-
-    // Imprimir el tiempo transcurrido
-    std::cout << "Tiempo de ejecución de ordenar_filas: " << milliseconds << " ms" << std::endl;
-
-    // Destruir los eventos
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
-
-
-
-
-
-
-
-
+    printf("Ordenar filas original\n");
     printf("Number of warps: %i\n", nwarps);
     for (int i = 0; i < n && i < 20; i++)
         printf("Iorder[%i] = %i\n", i, iorder[i]);
+
+    printf("Bye!\n");
+
+    int* iorder2 = (int*)calloc(n, sizeof(int));
+
+    // Llamar a la función ordenar_filas paralelizada
+    int nwarps2 = ordenar_filas2(RowPtrL_d, ColIdxL_d, Val_d, n, iorder2);
+
+    printf("Ordenar filas paralelizado\n");
+    printf("Number of warps: %i\n", nwarps2);
+    for (int i = 0; i < n && i < 20; i++)
+        printf("Iorder[%i] = %i\n", i, iorder2[i]);
 
     printf("Bye!\n");
 
