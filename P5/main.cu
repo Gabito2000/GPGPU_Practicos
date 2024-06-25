@@ -114,10 +114,10 @@ struct transf_a_warps {
     __device__
     int operator()(const int& cantidad, const LevelSizePair& clase ) const {
         int size ;
-        if (clase.size == 6 ){
+        if (clase.size == 0 ){
             size = 1;
         } else 
-            size = 1 << clase.size;
+            size = 1 << (clase.size - 1);
         return  (cantidad * size + WARP_SIZE - 1 )/ WARP_SIZE;
     }
 
@@ -138,19 +138,19 @@ struct ComputeLevelSize {
         int size;
 
         if (nnz_row == 0)
-            size = 6;
-        else if (nnz_row == 1)
             size = 0;
-        else if (nnz_row <= 2)
+        else if (nnz_row == 1)
             size = 1;
-        else if (nnz_row <= 4)
+        else if (nnz_row <= 2)
             size = 2;
-        else if (nnz_row <= 8)
+        else if (nnz_row <= 4)
             size = 3;
-        else if (nnz_row <= 16)
+        else if (nnz_row <= 8)
             size = 4;
-        else
+        else if (nnz_row <= 16)
             size = 5;
+        else
+            size = 6;
 
         return LevelSizePair{ level, size };
     }
@@ -172,6 +172,8 @@ int ordenar_filas2(int* RowPtrL, int* ColIdxL, VALUE_TYPE* Val, int n, int* iord
     
 
     kernel_analysis_L<<< grid, num_threads, WARP_PER_BLOCK * (2 * sizeof(int)) >>>(RowPtrL, ColIdxL, thrust::raw_pointer_cast(d_is_solved.data()), n, thrust::raw_pointer_cast(d_niveles.data()));
+
+    CUDA_CHK(cudaGetLastError());
 
     // Crear vectores en el host para Thrust
     thrust::device_vector<int> d_indices(n);
@@ -203,7 +205,6 @@ int ordenar_filas2(int* RowPtrL, int* ColIdxL, VALUE_TYPE* Val, int n, int* iord
 
 
 int ordenar_filas( int* RowPtrL, int* ColIdxL, VALUE_TYPE * Val, int n, int* iorder){
-    
     int * niveles;
 
     niveles = (int*) malloc(n * sizeof(int));
@@ -232,7 +233,6 @@ int ordenar_filas( int* RowPtrL, int* ColIdxL, VALUE_TYPE * Val, int n, int* ior
 
 
     /*Paralelice a partir de aquí*/
-
 
     /* Obtener el máximo nivel */
     int nLevs = niveles[0];
@@ -354,6 +354,7 @@ int ordenar_filas( int* RowPtrL, int* ColIdxL, VALUE_TYPE * Val, int n, int* ior
     return n_warps;
 
 }
+
 
 
 int main(int argc, char** argv) {
@@ -574,7 +575,7 @@ int main(int argc, char** argv) {
     cudaMemcpy(RowPtrL_d, csrRowPtrL_tmp, (n + 1) * sizeof(int), cudaMemcpyHostToDevice);
     cudaMemcpy(ColIdxL_d, csrColIdxL_tmp, nnzL * sizeof(int), cudaMemcpyHostToDevice);
     cudaMemcpy(Val_d, csrValL_tmp, nnzL * sizeof(VALUE_TYPE), cudaMemcpyHostToDevice);
-
+/*
     int* iorder = (int*)calloc(n, sizeof(int));
 
     // Llamar a la función ordenar_filas original
@@ -586,7 +587,7 @@ int main(int argc, char** argv) {
         printf("Iorder[%i] = %i\n", i, iorder[i]);
 
     printf("Bye!\n");
-
+*/
     int* iorder2 = (int*)calloc(n, sizeof(int));
 
     // Llamar a la función ordenar_filas paralelizada

@@ -1,0 +1,30 @@
+---------------------------------------------------------------------------------------------
+PRECISION = 64-bit Double Precision
+-------------- A_07.mtx --------------
+input matrix is symmetric = true
+input matrix A: ( 420, 420 ) nnz = 7860
+A's unit-lower triangular L: ( 420, 420 ) nnz = 4140
+---------------------------------------------------------------------------------------------
+32
+Number of warps: 240
+Iorder[0] = 417
+Iorder[1] = 418
+Iorder[2] = 0
+Iorder[3] = 1
+Iorder[4] = 2
+Iorder[5] = 42
+Iorder[6] = 84
+Iorder[7] = 126
+Iorder[8] = 168
+Iorder[9] = 210
+Iorder[10] = 252
+Iorder[11] = 294
+Iorder[12] = 336
+Iorder[13] = 378
+Iorder[14] = 379
+Iorder[15] = 380
+Iorder[16] = 3
+Iorder[17] = 43
+Iorder[18] = 85
+Iorder[19] = 127
+Bye!

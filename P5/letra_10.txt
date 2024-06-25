@@ -1,0 +1,30 @@
+---------------------------------------------------------------------------------------------
+PRECISION = 64-bit Double Precision
+-------------- A_10.mtx --------------
+input matrix is symmetric = true
+input matrix A: ( 5300, 5300 ) nnz = 21842
+A's unit-lower triangular L: ( 5300, 5300 ) nnz = 13571
+---------------------------------------------------------------------------------------------
+Ordenar filas original
+Number of warps: 396
+Iorder[0] = 1145
+Iorder[1] = 1694
+Iorder[2] = 0
+Iorder[3] = 1
+Iorder[4] = 2
+Iorder[5] = 3
+Iorder[6] = 4
+Iorder[7] = 5
+Iorder[8] = 6
+Iorder[9] = 7
+Iorder[10] = 8
+Iorder[11] = 9
+Iorder[12] = 10
+Iorder[13] = 11
+Iorder[14] = 12
+Iorder[15] = 13
+Iorder[16] = 14
+Iorder[17] = 15
+Iorder[18] = 16
+Iorder[19] = 17
+Bye!
