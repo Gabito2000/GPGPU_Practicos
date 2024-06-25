@@ -75,7 +75,8 @@
     "functional": "cpp",
     "memory_resource": "cpp",
     "numeric": "cpp",
-    "random": "cpp"
+    "random": "cpp",
+    "fstream": "cpp"
   },
   "C_Cpp_Runner.cCompilerPath": "gcc",
   "C_Cpp_Runner.cppCompilerPath": "g++",
