@@ -125,6 +125,15 @@ struct LevelSize {
     }
 
 };
+struct LevelSizeTransform {
+    __host__ __device__
+    int operator()(const thrust::tuple<LevelSize, int>& t) const {
+        LevelSize level_size_pair = thrust::get<0>(t);
+        int count = thrust::get<1>(t);
+        int size = (level_size_pair.size == 6) ? 1 : (1 << level_size_pair.size);
+        return (count * size + WARP_SIZE - 1) / WARP_SIZE;
+    }
+};
 
 
 // La estructura guarda un Puntero a los índices de las filas de la matriz y a los niveles.
@@ -160,104 +169,101 @@ struct func_LevelSize {
 };
 
 
-
-int ordenar_filas(int* RowPtrL, int* ColIdxL, VALUE_TYPE* Val, int n, int* iorder) {
-    // para trabajar con thrust redefino las variables d_niveles y d_is_solved
+int ordenar_filas(int* RowPtrL, int* ColIdxL, VALUE_TYPE* Val, int n, int* iorder,int veces) {
+    // Crear vectores en dispositivo con Thrust
     thrust::device_vector<unsigned int> d_niveles(n);
     thrust::device_vector<int> d_is_solved(n);
 
-    CUDA_CHK(cudaMemset(thrust::raw_pointer_cast(d_is_solved.data()),0, n * sizeof(int) ));
-    CUDA_CHK(cudaMemset(thrust::raw_pointer_cast(d_niveles.data()),0, n * sizeof(unsigned int) ));
+    // Inicializar vectores en el dispositivo
+    CUDA_CHK(cudaMemset(thrust::raw_pointer_cast(d_is_solved.data()), 0, n * sizeof(int)));
+    CUDA_CHK(cudaMemset(thrust::raw_pointer_cast(d_niveles.data()), 0, n * sizeof(unsigned int)));
 
     int num_threads = WARP_PER_BLOCK * WARP_SIZE;
+    int grid = (n * WARP_SIZE + num_threads - 1) / num_threads;
 
-    int grid = ceil ((double)n*WARP_SIZE / (double)(num_threads));
+    // Ejecutar kernel
+    kernel_analysis_L<<<grid, num_threads, WARP_PER_BLOCK * (2 * sizeof(int))>>>(
+        RowPtrL, 
+        ColIdxL, 
+        thrust::raw_pointer_cast(d_is_solved.data()),
+        n, 
+        thrust::raw_pointer_cast(d_niveles.data())
+    );
 
-    //CUDA_CHK( cudaMemset(d_is_solved, 0, n * sizeof(int)) )
-    //CUDA_CHK( cudaMemset(d_niveles, 0, n * sizeof(unsigned int)) )
+    // Asegurarse de que el kernel se ejecutó correctamente
+    CUDA_CHK(cudaGetLastError());
+    CUDA_CHK(cudaDeviceSynchronize());
 
-    kernel_analysis_L<<< grid, num_threads, WARP_PER_BLOCK * (2 * sizeof(int)) >>>( RowPtrL, 
-                                                                                    ColIdxL, 
-                                                                                    thrust::raw_pointer_cast(d_is_solved.data()),
-                                                                                    n, 
-                                                                                    thrust::raw_pointer_cast(d_niveles.data()));
-
-    //CUDA_CHK( cudaMemcpy(niveles, d_niveles, n * sizeof(int), cudaMemcpyDeviceToHost) )
-
+    // Inicializar variables para medir el tiempo
     std::chrono::high_resolution_clock::time_point start, end;
-    int veces = 10;
-    //arreglo para guardar los resultados y luego calcular el promedio y la desviación estándar
-    double * resultados = (double *) calloc(veces,sizeof(double));
+
+    // Precrear vectores de Thrust reutilizables fuera del bucle
+    thrust::device_vector<int> d_indices(n);
+    thrust::device_vector<LevelSize> d_level_size_pairs(n);
+    thrust::device_vector<LevelSize> d_level_1(n);
+    thrust::device_vector<int> d_level_2(n);
     int n_warps;
+    double resultados[veces];
+    
     for(int i =0; i<veces;i++){ //todo borrar luego de la prueba
-        // Verifico posibles errores del kernel
         start = std::chrono::high_resolution_clock::now();
 
-        // CUDA_CHK(cudaGetLastError());
-        // CUDA_CHK(cudaDeviceSynchronize());
-
-        // creo y lleno un vector de indices
-        thrust::device_vector<int> d_indices(n);
+        // Crear y llenar vector de índices
         thrust::sequence(d_indices.begin(), d_indices.end());
 
-        // creo un vector de LevelSize que se utiliza para modelar el for que se hacia de manera secuencial
-        thrust::device_vector<LevelSize> d_level_size_pairs(n);
-
-        // transformo los indices a LevelSize 
+        // Transformar los índices a LevelSize
         thrust::transform(d_indices.begin(), d_indices.end(), d_level_size_pairs.begin(),
-                        func_LevelSize(RowPtrL, thrust::raw_pointer_cast(d_niveles.data())));
+                          func_LevelSize(RowPtrL, thrust::raw_pointer_cast(d_niveles.data())));
 
-        // ordeno por su nivel y tamaño 
+        // Ordenar por nivel y tamaño
         thrust::stable_sort_by_key(d_level_size_pairs.begin(), d_level_size_pairs.end(), d_indices.begin());
 
-        // retorno ls estructura resultado en iorder
+        // Copiar resultados a iorder
         thrust::copy(d_indices.begin(), d_indices.end(), iorder);
 
-        // el siguiente codigo es para hallar el n_warps ya que no hallamos una funcion de thrust que lo halle automaticamente
-        thrust::pair<thrust::device_vector<LevelSize>::iterator, thrust::device_vector<int>::iterator> redu;
-        thrust::device_vector<LevelSize> d_level_1(n);
-        thrust::device_vector<int> d_level_2(n);
-
-        //reduce_by_key toma el primer elemento de cada key y el segundo elemento de cada key y los reduce con la operacion brindada
-        //es decir toma d_level_size_pairs.begin() y d_level_size_pairs.end() de la forma que el elemento n de d_level_size_pairs.begin()
-        // es la key de el elemento n de d_level_size_pairs.end(); Luego toma todos los elementos que tienen la misma key y los agrupa con
-        // la operacion brindada (en este caso thrust::constant_iterator<int>(1) que hará que se sumen la cantidad de elementos que tienen la misma key).
-        // Se guardan los resultados en d_level_1 (keys) y d_level_2 (values).
-        // Esto lo hacemos para obtener el número de clases luego con la operacion distance (con las keys), y para transformar los valores de las clases a warps (con los values).
-        redu = thrust::reduce_by_key(d_level_size_pairs.begin(), d_level_size_pairs.end(), 
-                                    thrust::constant_iterator<int>(1), d_level_1.begin(), d_level_2.begin());
+        // Reducir por clave para contar el número de warps
+        auto redu = thrust::reduce_by_key(d_level_size_pairs.begin(), d_level_size_pairs.end(),
+                                          thrust::constant_iterator<int>(1), d_level_1.begin(), d_level_2.begin());
 
         // Calcular el número de clases
         int num_clases = std::distance(d_level_1.begin(), redu.first);
 
-        // Transformo a warps
-        for (int i = 0; i < num_clases; ++i) {
-            LevelSize level_size_pair = d_level_1[i];
-            int size = (level_size_pair.size == 6) ? 1 : (1 << level_size_pair.size);
-            d_level_2[i] = (d_level_2[i] * size + WARP_SIZE - 1) / WARP_SIZE;
-        }
+        // Transformar a warps
+        thrust::transform(
+            thrust::make_zip_iterator(thrust::make_tuple(d_level_1.begin(), d_level_2.begin())),
+            thrust::make_zip_iterator(thrust::make_tuple(d_level_1.begin() + num_clases, d_level_2.begin() + num_clases)),
+            d_level_2.begin(),
+            LevelSizeTransform()
+        );
 
+        // Reducir para obtener el número total de warps
         n_warps = thrust::reduce(d_level_2.begin(), d_level_2.begin() + num_clases, 0);
 
         end = std::chrono::high_resolution_clock::now();
-        resultados[i] = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+        resultados[i] = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
+    
     }
-    double promedio = 0;
-    for(int i =0; i<veces;i++){
-        promedio += resultados[i];
+    // Calcular promedio y desviación estándar
+    if(veces == 10){
+        double promedio = 0;
+        for(int i = 0; i < veces; i++) {
+            promedio += resultados[i];
+        }
+        promedio /= veces;
+
+        double desviacion = 0;
+        for(int i = 0; i < veces; i++) {
+            desviacion += (resultados[i] - promedio) * (resultados[i] - promedio);
+        }
+        desviacion = sqrt(desviacion / veces);
+
+        printf("PromedioInterno: %f\n", promedio);
+        printf("DesviaciónInterno: %f\n", desviacion);
     }
-    promedio = promedio/veces;
-    double desviacion = 0;
-    for(int i =0; i<veces;i++){
-        desviacion += (resultados[i]-promedio)*(resultados[i]-promedio);
-    }
-    desviacion = sqrt(desviacion/veces);
-    printf("Promedio: %f\n",promedio);
-    printf("Desviación: %f\n",desviacion);
 
     return n_warps;
-    return 1;
 }
+
 
 
 
@@ -518,14 +524,37 @@ int main(int argc, char** argv)
     cudaMemcpy(Val_d, csrValL_tmp, nnzL * sizeof(VALUE_TYPE), cudaMemcpyHostToDevice);
 
     int * iorder  = (int *) calloc(n,sizeof(int));
-    std::chrono::high_resolution_clock::time_point start, end;
-    start = std::chrono::high_resolution_clock::now();
-    
-    int nwarps = ordenar_filas(RowPtrL_d,ColIdxL_d,Val_d,n,iorder);
-        
-    std::chrono::duration<double> diff = end - start;
-    std::cout << "Tiempo de la implementación es: " << diff.count() << " s\n";
 
+    
+    double resultados[10];
+    for (int i = 0; i < 10; i++) {
+        std::chrono::high_resolution_clock::time_point start, end;
+        start = std::chrono::high_resolution_clock::now();
+        
+        ordenar_filas(RowPtrL_d,ColIdxL_d,Val_d,n,iorder, 1);
+
+        end = std::chrono::high_resolution_clock::now();    
+        std::chrono::duration<double> diff = end - start;
+        resultados[i] = diff.count();
+    }
+    
+    double promedio = 0;
+    for(int i = 0; i < 10; i++) {
+        promedio += resultados[i];
+    }
+    promedio /= 10;
+
+    double desviacion = 0;
+    for(int i = 0; i < 10; i++) {
+        desviacion += (resultados[i] - promedio) * (resultados[i] - promedio);
+    }
+    desviacion = sqrt(desviacion / 10);
+
+    printf("PromedioGlobal: %f\n", promedio);
+    printf("DesviaciónGlobal: %f\n", desviacion);
+
+    int nwarps = ordenar_filas(RowPtrL_d,ColIdxL_d,Val_d,n,iorder, 10);
+    printf("Number of warps: %i\n", nwarps);
     for(int i =0; i<n && i<20;i++)
         printf("Iorder[%i] = %i\n",i,iorder[i]);
 

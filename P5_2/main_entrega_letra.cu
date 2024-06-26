@@ -110,7 +110,7 @@ __global__ void kernel_analysis_L(const int* __restrict__ row_ptr,
     VALUE_TYPE* Val_d;
 
 
-int ordenar_filas( int* RowPtrL, int* ColIdxL, VALUE_TYPE * Val, int n, int* iorder){
+int ordenar_filas( int* RowPtrL, int* ColIdxL, VALUE_TYPE * Val, int n, int* iorder, int veces){
     
     int * niveles;
 
@@ -142,9 +142,7 @@ int ordenar_filas( int* RowPtrL, int* ColIdxL, VALUE_TYPE * Val, int n, int* ior
     /*Paralelice a partir de aquí*/
     /* Obtener el máximo nivel */
     std::chrono::high_resolution_clock::time_point start, end;
-    int veces = 10;
-    //arreglo para guardar los resultados y luego calcular el promedio y la desviación estándar
-    double * resultados = (double *) calloc(veces,sizeof(double));
+    double resultados[veces];
     
     int n_warps;
     for(int i =0; i<veces;i++){ //todo borrar luego de la prueba
@@ -260,22 +258,25 @@ int ordenar_filas( int* RowPtrL, int* ColIdxL, VALUE_TYPE * Val, int n, int* ior
         n_warps = ii;
 
         end = std::chrono::high_resolution_clock::now();
-        resultados[i] = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+        resultados[i] = std::chrono::duration_cast<std::chrono::duration<double>> (end - start).count();
     /*Termine aquí*/
     }
     /*Calcular promedio y desviación estándar*/
-    double promedio = 0;
-    double desviacion = 0;
-    for(int i =0; i<veces;i++){
-        promedio += resultados[i];
+
+    if (veces == 10) {
+        double promedio = 0;
+        double desviacion = 0;
+        for(int i =0; i<veces;i++){
+            promedio += resultados[i];
+        }
+        promedio = promedio/veces;
+        for(int i =0; i<veces;i++){
+            desviacion += (resultados[i]-promedio)*(resultados[i]-promedio);
+        }
+        desviacion = sqrt(desviacion/veces);
+        printf("PromedioInterno: %f\n",promedio);
+        printf("DesviaciónInterno: %f\n",desviacion);
     }
-    promedio = promedio/veces;
-    for(int i =0; i<veces;i++){
-        desviacion += (resultados[i]-promedio)*(resultados[i]-promedio);
-    }
-    desviacion = sqrt(desviacion/veces);
-    printf("Promedio: %f\n",promedio);
-    printf("Desviación estándar: %f\n",desviacion);
 
 
     CUDA_CHK( cudaFree(d_niveles) ) 
@@ -544,10 +545,38 @@ int main(int argc, char** argv)
     cudaMemcpy(Val_d, csrValL_tmp, nnzL * sizeof(VALUE_TYPE), cudaMemcpyHostToDevice);
 
     int * iorder  = (int *) calloc(n,sizeof(int));
-
     
-    ordenar_filas(RowPtrL_d,ColIdxL_d,Val_d,n,iorder);
+    double resultados[10];
+    for (int i = 0; i < 10; i++) {
+        std::chrono::high_resolution_clock::time_point start, end;
+        start = std::chrono::high_resolution_clock::now();
+        
+        ordenar_filas(RowPtrL_d,ColIdxL_d,Val_d,n,iorder, 1);
 
+        end = std::chrono::high_resolution_clock::now();    
+        std::chrono::duration<double> diff = end - start;
+        resultados[i] = diff.count();
+    }
+
+    double promedio = 0;
+    for(int i = 0; i < 10; i++) {
+        promedio += resultados[i];
+    }
+    promedio /= 10;
+
+    double desviacion = 0;
+    for(int i = 0; i < 10; i++) {
+        desviacion += (resultados[i] - promedio) * (resultados[i] - promedio);
+    }
+    desviacion = sqrt(desviacion / 10);
+
+    printf("PromedioGlobal: %f\n", promedio);
+    printf("DesviaciónGlobal: %f\n", desviacion);
+
+    int nwarps = ordenar_filas(RowPtrL_d,ColIdxL_d,Val_d,n,iorder, 10);
+
+
+    printf("Number of warps: %i\n", nwarps);
     for(int i =0; i<n && i<20;i++)
         printf("Iorder[%i] = %i\n",i,iorder[i]);
 
