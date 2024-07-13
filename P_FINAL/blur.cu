@@ -20,111 +20,189 @@
 
 using namespace std;
 
-
-__device__ void swap(float& a, float& b) {
-    //swap two elements without using a temporary variable
-    a = a + b;
-    b = a - b;
-    a = a - b;
-}
-
-__device__ int partition(float* arr, int low, int high) {
-    float pivot = arr[high];
-    int i = low - 1;
-
-    for (int j = low; j <= high - 1; j++) {
-        if (arr[j] < pivot) {
-            i++;
-            swap(arr[i], arr[j]);
+int getMax_cpu(const std::vector<int>& arr) {
+    int max = arr[0];
+    for (int num : arr) {
+        if (num > max) {
+            max = num;
         }
     }
-    swap(arr[i + 1], arr[high]);
-    return i + 1;
+    return max;
 }
 
-__device__ void quickSort(float* arr, int low, int high) {
-    if (low < high) {
-        int pi = partition(arr, low, high);
-        quickSort(arr, low, pi - 1);
-        quickSort(arr, pi + 1, high);
+void countingSort_cpu(std::vector<int>& arr, int exp) {
+    int n = arr.size();
+    std::vector<int> output(n);
+    int count[10] = {0};
+
+    for (int i = 0; i < n; i++) {
+        count[(arr[i] / exp) % 10]++;
+    }
+
+    for (int i = 1; i < 10; i++) {
+        count[i] += count[i - 1];
+    }
+
+    for (int i = n - 1; i >= 0; i--) {
+        output[count[(arr[i] / exp) % 10] - 1] = arr[i];
+        count[(arr[i] / exp) % 10]--;
+    }
+
+    for (int i = 0; i < n; i++) {
+        arr[i] = output[i];
     }
 }
 
-__global__ void filtro_mediana_kernel(float* d_input, float* d_output, int width, int height, float W){
+void radixSort_cpu(std::vector<int>& arr) {
+    int max = getMax_cpu(arr);
 
-    int windowSize = (2 * W + 1) * (2 * W + 1);
-    float* window = new float[windowSize];
-    
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
-    int count = 0;
-
-    for (int i = x - W; i <= x + W; i++){
-        for (int j = y - W; j <= y + W; j++){
-            if (i >= 0 && i < width && j >= 0 && j < height){
-                window[count++] = d_input[j * width + i];
-            }
-        }
+    for (int exp = 1; max / exp > 0; exp *= 10) {
+        countingSort_cpu(arr, exp);
     }
-
-    //sort array with a quicksort
-    quickSort(window, 0, count - 1);
-    d_output[y * width + x] = window[count / 2];
-
 }
 
-void filtro_mediana_gpu(float * img_in, float * img_out, int width, int height, int W){
+void filtro_mediana_cpu(float* img_in, float* img_out, int width, int height, int W) {
     std::chrono::high_resolution_clock::time_point start, end;
     start = std::chrono::high_resolution_clock::now();
-
-    for (int i = 0; i < 10; i++){
-        float *d_input, *d_output;
-        cudaMalloc(&d_input, width * height * sizeof(float));
-        cudaMalloc(&d_output, width * height * sizeof(float));
-
-        cudaMemcpy(d_input, img_in, width * height * sizeof(float), cudaMemcpyHostToDevice);
-
-        dim3 blockSize(32, 32);
-        dim3 gridSize((width + blockSize.x - 1) / blockSize.x, (height + blockSize.y - 1) / blockSize.y);
-
-        filtro_mediana_kernel<<<gridSize, blockSize>>>(d_input, d_output, width, height, W);
-
-        cudaMemcpy(img_out, d_output, width * height * sizeof(float), cudaMemcpyDeviceToHost);
-
-        cudaFree(d_input);
-        cudaFree(d_output);    
-
-    }
-    end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<float> duration = end - start;
-
-    printf("Tiempo GPU: %f\n", duration.count());
-    
-}
-
-void filtro_mediana_cpu(float * img_in, float * img_out, int width, int height, int W){
-    std::chrono::high_resolution_clock::time_point start, end;
-    start = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < 10; i++){
-    //implementar filtro de mediana en CPU 
-        for (int pixel = 0; pixel < width * height; pixel++){
+    for (int i = 0; i < 10; i++) {
+        for (int pixel = 0; pixel < width * height; pixel++) {
             int x = pixel % width;
             int y = pixel / width;
             float window[(2 * W + 1) * (2 * W + 1)];
             int count = 0;
-            for (int i = x - W; i <= x + W; i++){
-                for (int j = y - W; j <= y + W; j++){
-                    if (i >= 0 && i < width && j >= 0 && j < height){
+            for (int i = x - W; i <= x + W; i++) {
+                for (int j = y - W; j <= y + W; j++) {
+                    if (i >= 0 && i < width && j >= 0 && j < height) {
                         window[count++] = img_in[j * width + i];
                     }
                 }
             }
-            //sort array with a quicksort
-            std::sort(window, window + count);
+
+            // Escalar a enteros
+            std::vector<int> int_window(count);
+            for (int k = 0; k < count; k++) {
+                int_window[k] = static_cast<int>(window[k] * 1000); // Ajustar escala si es necesario
+            }
+
+            // Aplicar Radix Sort
+            radixSort_cpu(int_window);
+
+            // Desescalar a flotantes y encontrar la mediana
+            for (int k = 0; k < count; k++) {
+                window[k] = static_cast<float>(int_window[k]) / 1000.0f; // Ajustar escala si es necesario
+            }
+
             img_out[pixel] = window[count / 2];
         }
     }
     end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<float> duration = end - start;
     printf("Tiempo CPU: %f\n", duration.count());
+}
+
+ // ...................................................................................................................
+
+__device__ void radixSort(float* window, int count) {
+    extern __shared__ int int_window[];
+    for (int i = 0; i < count; i++) {
+        int_window[i] = static_cast<int>(window[i] * 1000);
+    }
+
+    int max = int_window[0];
+    for (int i = 1; i < count; i++) {
+        if (int_window[i] > max) {
+            max = int_window[i];
+        }
+    }
+
+    for (int exp = 1; max / exp > 0; exp *= 10) {
+        __shared__ int output[1024];
+        __shared__ int countArr[10];
+
+        if (threadIdx.x < 10) {
+            countArr[threadIdx.x] = 0;
+        }
+        __syncthreads();
+
+        for (int i = threadIdx.x; i < count; i += blockDim.x) {
+            atomicAdd(&countArr[(int_window[i] / exp) % 10], 1);
+        }
+        __syncthreads();
+
+        for (int i = 1; i < 10; i++) {
+            countArr[i] += countArr[i - 1];
+        }
+        __syncthreads();
+
+        for (int i = count - 1; i >= 0; i--) {
+            int idx = atomicSub(&countArr[(int_window[i] / exp) % 10], 1) - 1;
+            output[idx] = int_window[i];
+        }
+        __syncthreads();
+
+        for (int i = threadIdx.x; i < count; i += blockDim.x) {
+            int_window[i] = output[i];
+        }
+        __syncthreads();
+    }
+
+    for (int i = 0; i < count; i++) {
+        window[i] = static_cast<float>(int_window[i]) / 1000.0f;
+    }
+}
+
+// Kernel para aplicar el filtro de mediana
+__global__ void medianaKernel(float* img_in, float* img_out, int width, int height, int W) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int pixel = y * width + x;
+
+    if (x < width && y < height) {
+        extern __shared__ float window[];
+        int count = 0;
+
+        for (int i = x - W; i <= x + W; i++) {
+            for (int j = y - W; j <= y + W; j++) {
+                if (i >= 0 && i < width && j >= 0 && j < height) {
+                    window[count++] = img_in[j * width + i];
+                }
+            }
+        }
+
+        radixSort(window, count);
+
+        img_out[pixel] = window[count / 2];
+    }
+}
+
+void filtro_mediana_gpu(float* img_in, float* img_out, int width, int height, int W) {
+    float *d_img_in, *d_img_out;
+    size_t size = width * height * sizeof(float);
+
+    cudaMalloc(&d_img_in, size);
+    cudaMalloc(&d_img_out, size);
+
+    cudaMemcpy(d_img_in, img_in, size, cudaMemcpyHostToDevice);
+
+    dim3 threadsPerBlock(16, 16);
+    dim3 blocksPerGrid((width + threadsPerBlock.x - 1) / threadsPerBlock.x,
+                       (height + threadsPerBlock.y - 1) / threadsPerBlock.y);
+
+    std::chrono::high_resolution_clock::time_point start, end;
+    start = std::chrono::high_resolution_clock::now();
+
+    size_t sharedMemSize = (2 * W + 1) * (2 * W + 1) * sizeof(float);
+    for (int i = 0; i < 10; i++) {
+        medianaKernel<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(d_img_in, d_img_out, width, height, W);
+        cudaDeviceSynchronize();
+    }
+
+    end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<float> duration = end - start;
+    printf("Tiempo GPU: %f\n", duration.count());
+
+    cudaMemcpy(img_out, d_img_out, size, cudaMemcpyDeviceToHost);
+
+    cudaFree(d_img_in);
+    cudaFree(d_img_out);
 }
