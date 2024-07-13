@@ -12,8 +12,7 @@ void filtro_mediana_gpu(int * img_in, int * img_out, int width, int height, int 
 void filtro_mediana_cpu(int * img_in, int * img_out, int width, int height, int W);
     
 int main(int argc, char** argv){
-
-
+	
 	const char * path;
 
 	if (argc < 2) printf("Debe ingresar el nombre del archivo\n");
@@ -34,8 +33,9 @@ int main(int argc, char** argv){
 	}
 	end = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<float> duration = std::chrono::duration_cast<std::chrono::duration<float>>(end - start);
+	printf("version 2 \n");
 	printf("Tiempo CPU: %f\n", duration.count()/ITERATIONS);
-	image_out.save("output_cpu.pgm");
+	image_out.save("output_cpu_2.pgm");
 	
 	start = std::chrono::high_resolution_clock::now();
 	for (int i = 0; i < ITERATIONS; i++){
@@ -44,6 +44,7 @@ int main(int argc, char** argv){
 	end = std::chrono::high_resolution_clock::now();
 	duration = std::chrono::duration_cast<std::chrono::duration<float>>(end - start);
 	printf("Tiempo GPU: %f\n", duration.count()/ITERATIONS);
+	image_out.save("output_gpu_2.pgm");
    	
    return 0;
 }

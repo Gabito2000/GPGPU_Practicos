@@ -26,10 +26,7 @@ using namespace std;
 
 
 void filtro_mediana_cpu(int* img_in, int* img_out, int width, int height, int W) {
-    //RETURN  THE INPUT
-    for (int i = 0; i < width * height; i++) {
-        img_out[i] = img_in[i];
-    }
+    /
 }
 
  // ...................................................................................................................
