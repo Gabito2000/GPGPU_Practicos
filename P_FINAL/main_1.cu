@@ -34,7 +34,8 @@ int main(int argc, char** argv){
 	}
 	end = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<float> duration = std::chrono::duration_cast<std::chrono::duration<float>>(end - start);
-	printf("version 1 \n");
+	printf("version 1 ----------------------- \n");
+	printf("Quicksort \n");
 	printf("Tiempo CPU: %f\n", duration.count()/ITERATIONS);
 	image_out.save("output_cpu_1.pgm");
 	

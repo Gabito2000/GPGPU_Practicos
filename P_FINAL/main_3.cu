@@ -26,23 +26,16 @@ int main(int argc, char** argv){
    int *img_out_matrix = image_out.data();
 
 	int w = 3;
+	printf("version 3 ----------------------- \n");
+	printf("Radixsort con cub \n");
 	std::chrono::high_resolution_clock::time_point start, end;
-    start = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < ITERATIONS; i++){
-		filtro_mediana_cpu(img_matrix, img_out_matrix, image.width(), image.height(), w);
-	}
-	end = std::chrono::high_resolution_clock::now();
-	std::chrono::duration<float> duration = std::chrono::duration_cast<std::chrono::duration<float>>(end - start);
-	printf("version 3 \n");
-	printf("Tiempo CPU: %f\n", duration.count()/ITERATIONS);
-	image_out.save("output_cpu_3.pgm");
 	
 	start = std::chrono::high_resolution_clock::now();
 	for (int i = 0; i < ITERATIONS; i++){
 		filtro_mediana_gpu(img_matrix, img_out_matrix, image.width(), image.height(), w);
 	}
 	end = std::chrono::high_resolution_clock::now();
-	duration = std::chrono::duration_cast<std::chrono::duration<float>>(end - start);
+	std::chrono::duration<float> duration = std::chrono::duration_cast<std::chrono::duration<float>>(end - start);
 	printf("Tiempo GPU: %f\n", duration.count()/ITERATIONS);
    	image_out.save("output_gpu_3.pgm");
 
