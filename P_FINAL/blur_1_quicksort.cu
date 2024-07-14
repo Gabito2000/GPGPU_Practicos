@@ -5,18 +5,11 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 #include "nvToolsExt.h"
-#include <thrust/device_vector.h>
-#include <thrust/host_vector.h>
-#include <thrust/sort.h>
-#include <thrust/sequence.h>
-#include <thrust/transform.h>
-#include <chrono>
-
-#include <thrust/copy.h>
-#include <thrust/count.h>
-#include <thrust/functional.h>
 #include <cuda_runtime.h>
-#include <thrust/iterator/constant_iterator.h>
+#include <algorithm> 
+#include <vector>
+#include <iostream>
+
 
 using namespace std;
 

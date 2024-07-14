@@ -10,7 +10,12 @@ using namespace cimg_library;
 
 void filtro_mediana_gpu(int * img_in, int * img_out, int width, int height, int W);
 void filtro_mediana_cpu(int * img_in, int * img_out, int width, int height, int W);
-    
+
+// Función para calcular la diferencia de tiempo en segundos
+double time_diff(struct timeval *start, struct timeval *end) {
+    return (double)(end->tv_sec - start->tv_sec) + (double)(end->tv_usec - start->tv_usec) / 1000000.0;
+}
+
 int main(int argc, char** argv){
 	
 	const char * path;
@@ -26,18 +31,23 @@ int main(int argc, char** argv){
    int *img_out_matrix = image_out.data();
 
 	int w = 3;
-	printf("version 3 ----------------------- \n");
-	printf("Radixsort con cub \n");
-	std::chrono::high_resolution_clock::time_point start, end;
-	
-	start = std::chrono::high_resolution_clock::now();
-	for (int i = 0; i < ITERATIONS; i++){
+
+	struct timeval start, end;
+    gettimeofday(&start, NULL);
+    for (int i = 0; i < ITERATIONS; i++){
 		filtro_mediana_gpu(img_matrix, img_out_matrix, image.width(), image.height(), w);
 	}
-	end = std::chrono::high_resolution_clock::now();
-	std::chrono::duration<float> duration = std::chrono::duration_cast<std::chrono::duration<float>>(end - start);
-	printf("Tiempo GPU: %f\n", duration.count()/ITERATIONS);
-   	image_out.save("output_gpu_3.pgm");
+	gettimeofday(&end, NULL);
+	double duration = time_diff(&start, &end);
+	
+	printf("version 3 ----------------------- \n");
+	printf("Radixsort con Thrust \n");
+	printf("Tiempo GPU: %f\n", duration /ITERATIONS);
+	image_out.save("output_gpu_3.pgm");
+	
+
+
+	
 
    return 0;
 }

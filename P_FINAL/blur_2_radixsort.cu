@@ -10,7 +10,6 @@
 #include <thrust/sort.h>
 #include <thrust/sequence.h>
 #include <thrust/transform.h>
-#include <chrono>
 
 #include <thrust/copy.h>
 #include <thrust/count.h>
@@ -113,21 +112,6 @@ void filtro_mediana_cpu(int* img_in, int* img_out, int width, int height, int W)
 
 
  // ...................................................................................................................
-
-#define BITS_PER_PASS 1
-
-// Error checking macro
-#define cudaCheckError() {                                      \
-    cudaError_t e = cudaGetLastError();                         \
-    if (e != cudaSuccess) {                                     \
-        printf("CUDA error %s:%d: %s\n", __FILE__, __LINE__, cudaGetErrorString(e)); \
-        exit(1);                                                \
-    }                                                           \
-}
-
-//--------------------
-
-#define BLOCK_SIZE_RADIX 256
 
 
 // Función para realizar un split basado en el bit n-ésimo
