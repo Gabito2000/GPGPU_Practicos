@@ -73,7 +73,7 @@ void filtro_mediana_gpu(int * img_in, int * img_out, int width, int height, int 
 
     cudaMemcpy(d_input, img_in, width * height * sizeof(int), cudaMemcpyHostToDevice);
 
-    dim3 blockSize(32, 32);
+    dim3 blockSize((W * 2 + 1), (W * 2 + 1));
     dim3 gridSize((width + blockSize.x - 1) / blockSize.x, (height + blockSize.y - 1) / blockSize.y);
 
     filtro_mediana_kernel<<<gridSize, blockSize>>>(d_input, d_output, width, height, W);

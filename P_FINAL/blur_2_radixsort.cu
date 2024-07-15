@@ -17,7 +17,7 @@
 #include <cuda_runtime.h>
 #include <thrust/iterator/constant_iterator.h>
 #define MAX_DIGITS 32 // Assuming 32-bit integers
-
+#define MAX_INT 2147483647
 
 using namespace std;
 
@@ -114,93 +114,135 @@ void filtro_mediana_cpu(int* img_in, int* img_out, int width, int height, int W)
  // ...................................................................................................................
 
 
-// Función para realizar un split basado en el bit n-ésimo
-__device__ void split(int* d_input, int* d_output, int* d_bitArray, int* d_prefixSum, int n, int size) {
-    int idx = threadIdx.x;
-    if (idx < size) {
-        // Extract bit
-        int as_int = d_input[idx];
-        d_bitArray[idx] = (as_int >> n) & 1;
-    }
-    __syncthreads();
-
-    // Perform exclusive scan (simplified for shared memory usage)
-    for (int stride = 1; stride < blockDim.x; stride *= 2) {
-        int index = (idx + 1) * stride * 2 - 1;
-        if (index < blockDim.x) {
-            d_prefixSum[index] += d_prefixSum[index - stride];
-        }
-        __syncthreads();
-    }
-
-    if (idx < size) {
-        // Reorder
-        int destination;
-        if (d_bitArray[idx] == 0) {
-            destination = d_prefixSum[idx];
-        } else {
-            destination = idx - d_prefixSum[idx] + d_prefixSum[size-1] + (d_bitArray[size-1] == 0);
-        }
-        d_output[destination] = d_input[idx];
-    }
-    __syncthreads();
-
-    // Copy back to input array for next iteration
-    if (idx < size) {
-        d_input[idx] = d_output[idx];
-    }
-}
-
-// Función principal de Radix Sort
-__device__ void radixSort(int* d_input, int size) {
-    __shared__ int d_output[1024];  // Adjust size as needed, or use dynamic shared memory
-    __shared__ int d_bitArray[1024];  // Adjust size as needed
-    __shared__ int d_prefixSum[1024]; // Adjust size as needed
-
-    for (int bit = 0; bit < 32; bit++) {
-        split(d_input, d_output, d_bitArray, d_prefixSum, bit, size);
-    }
-}
-
-// Kernel para aplicar el filtro de mediana
-__global__ void medianaKernel(int* img_in, int* img_out, int width, int height, int W) {
+__global__ void fillWindows(int* img_in, int* windows, int width, int height, int W) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int windowSize = (2 * W + 1) * (2 * W + 1);
     int pixel = y * width + x;
+    int count = 0;
+    int padding = 0;
+    int* currentWindow = &windows[(y * width + x) * windowSize];
 
-    if (x < width && y < height) {
-        __shared__ int window[1024];  // Adjust size as needed, or use dynamic shared memory
-        int count = 0;
+    if (x > width || y > height) return;
 
+    
+    for (int j = y - W; j <= y + W; j++) {
         for (int i = x - W; i <= x + W; i++) {
-            for (int j = y - W; j <= y + W; j++) {
-                if (i >= 0 && i < width && j >= 0 && j < height) {
-                    window[count++] = img_in[j * width + i];
-                }
+            if (i >= 0 && i < width && j >= 0 && j < height) {
+                currentWindow[count] = img_in[j * width + i];
             }
+            else {
+                currentWindow[count] = padding;
+                padding = MAX_INT-padding; // To avoid sorting the padding
+            }
+            count++;
         }
-
-        radixSort(window, count);
-
-        img_out[pixel] = window[count / 2];
     }
 }
 
+
+__device__ int split(int* windows, int windowSize, int bit, int width, int height) {
+    
+    int tid = threadIdx.x + threadIdx.y * blockDim.x;
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int* currentWindow = &windows[(y * width + x) * windowSize];
+
+    int mask = 1 << bit;
+    int bitArray[1024];
+    int prefixSum[1024];
+    int output[1024];
+    
+    // Extract bit
+    for (int i = 0; i < windowSize; i++) {
+        bitArray[i] = (currentWindow[i] & mask) >> bit;
+    }
+    
+    __syncthreads();
+    // Perform exclusive scan (prefix sum of not bit)
+    prefixSum[0] = 0;
+    for (int i = 1; i < windowSize; i++) {
+        prefixSum[i] = prefixSum[i - 1] + (1 - bitArray[i - 1]);
+    }
+    __syncthreads();
+
+    int totalFalses = prefixSum[windowSize - 1] + (1 - bitArray[windowSize - 1]);
+    
+    // Reorder
+    for (int i = 0; i < windowSize; i++) {
+        int destination;
+        if (bitArray[i] == 0) {
+            destination = prefixSum[i];
+        } else {
+            destination = i - prefixSum[i] + totalFalses;
+        }
+        output[destination] = currentWindow[i];
+    }
+    __syncthreads();
+    // Copy back to input array for next iteration
+    for (int i = 0; i < windowSize; i++) {
+        currentWindow[i] = output[i];
+    }
+    __syncthreads();
+    return totalFalses;
+}
+
+__global__ void radixSort_gpu(int* windows, int width, int height, int W) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (x >= width || y >= height) return;
+
+    // add the window to shared memory
+    int windowSize = (2 * W + 1) * (2 * W + 1);
+    
+    // Radix sort
+    for (int bit = 0; bit < MAX_DIGITS; bit++) {
+        split(windows, windowSize, bit, width, height);
+    }
+}
+
+__global__ void selectMedian(int* windows, int* img_out, int width, int height, int W) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    
+    if (x < width && y < height) {
+        int windowSize = (2 * W + 1) * (2 * W + 1);
+        int* currentWindow = &windows[(y * width + x) * windowSize];
+        
+        // Select the median (middle element after sorting)
+        img_out[y * width + x] = currentWindow[windowSize / 2];
+    }
+}
+
+
 void filtro_mediana_gpu(int* img_in, int* img_out, int width, int height, int W) {
-    int *d_img_in, *d_img_out;
+    int *d_img_in, *d_img_out, *d_windows;
     size_t size = width * height * sizeof(int);
 
     cudaMalloc(&d_img_in, size);
     cudaMalloc(&d_img_out, size);
+    
 
     cudaMemcpy(d_img_in, img_in, size, cudaMemcpyHostToDevice);
 
-    dim3 threadsPerBlock(16, 16);
-    dim3 blocksPerGrid((width + threadsPerBlock.x - 1) / threadsPerBlock.x,
-                       (height + threadsPerBlock.y - 1) / threadsPerBlock.y);
+    dim3 threadsPerBlock((W * 2 + 1), (W * 2 + 1));
+    dim3 blocksPerGrid((width + threadsPerBlock.x - 1) / threadsPerBlock.x, (height + threadsPerBlock.y - 1) / threadsPerBlock.y);
 
-    size_t sharedMemSize = (2 * W + 1) * (2 * W + 1) * sizeof(int);
-    medianaKernel<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(d_img_in, d_img_out, width, height, W);
+    // Allocate device memory for windows
+    size_t windowSize = (2 * W + 1) * (2 * W + 1) * sizeof(int);
+    cudaMalloc(&d_windows, width * height * windowSize);
+
+    // Fill windows
+    fillWindows<<<blocksPerGrid, threadsPerBlock>>>(d_img_in, d_windows, width, height, W);
+
+    // Sort windows
+    radixSort_gpu<<<blocksPerGrid, threadsPerBlock>>>(d_windows, width, height, W);
+
+    // Select median
+    selectMedian<<<blocksPerGrid, threadsPerBlock>>>(d_windows, d_img_out, width, height, W);
+
+
     cudaDeviceSynchronize();
     cudaMemcpy(img_out, d_img_out, size, cudaMemcpyDeviceToHost);
 

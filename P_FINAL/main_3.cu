@@ -28,7 +28,7 @@ int main(int argc, char** argv){
 	CImg<int> image_out(image.width(), image.height(),1,1,0);
 
 	int *img_matrix = image.data();
-   int *img_out_matrix = image_out.data();
+   	int *img_out_matrix = image_out.data();
 
 	int w = 3;
 
