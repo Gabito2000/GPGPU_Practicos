@@ -39,8 +39,8 @@ int main(int argc, char** argv){
 	gettimeofday(&end, NULL);
 	double duration = time_diff(&start, &end);
 	
-	printf("version 3 ----------------------- \n");
-	printf("Radixsort con Thrust \n");
+	printf("version 4 ----------------------- \n");
+	printf("Paralelismo: 1\n");
 	printf("Tiempo GPU: %f\n", duration /ITERATIONS);
 	image_out.save("output_gpu_4.pgm");
 	

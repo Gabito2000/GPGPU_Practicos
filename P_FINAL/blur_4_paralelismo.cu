@@ -115,74 +115,59 @@ void filtro_mediana_cpu(int* img_in, int* img_out, int width, int height, int W)
 
 
 __global__ void fillWindows(int* img_in, int* windows, int width, int height, int W) {
+    int pixel = blockIdx.x + blockIdx.y * height;
 
-    // pixel is the block id 
-    
-    int *currentWindow = &windows[(blockIdx.x * (2 * W + 1) * (2 * W + 1))];
+    if (pixel >= width * height) return;
 
-    int x = blockIdx.x % width;
-    int y = blockIdx.x / width;
+    int elemento_ventana = threadIdx.x + threadIdx.y * blockDim.x;
 
-    int windowSize = (2 * W + 1) * (2 * W + 1);
-    int windowIndex = threadIdx.x + threadIdx.y * blockDim.x;
-    int windowX = windowIndex % (2 * W + 1);
-    int windowY = windowIndex / (2 * W + 1);
-    int imgX = x + windowX - W;
-    int imgY = y + windowY - W;
+    int poss_inicio_windows_arr = pixel * (2 * W + 1) * (2 * W + 1); 
+    int poss_elemento_en_ventana = elemento_ventana + poss_inicio_windows_arr;
 
-    if (imgX >= 0 && imgX < width && imgY >= 0 && imgY < height) {
-        currentWindow[windowIndex] = img_in[imgY * width + imgX];
-    } else {
-        currentWindow[windowIndex] = 0;
-    }
-
+    windows[poss_elemento_en_ventana] = img_in[pixel];
 }
 
-
-__device__ int split(int* windows, int windowSize, int bit, int width, int height) {
-    
-    int tid = threadIdx.x + threadIdx.y * blockDim.x;
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
-    int* currentWindow = &windows[(y * width + x) * windowSize];
+// split function
+__device__ void split(int* window, int bit, int W) {
+    int n = (2 * W + 1) * (2 * W + 1);
+    int* output = new int[n];
+    int* bitArray = new int[n];
+    int* prefixSum = new int[n];
 
     int mask = 1 << bit;
-    int bitArray[1024];
-    int prefixSum[1024];
-    int output[1024];
-    
+
     // Extract bit
-    for (int i = 0; i < windowSize; i++) {
-        bitArray[i] = (currentWindow[i] & mask) >> bit;
+    for (int i = 0; i < n; i++) {
+        bitArray[i] = (window[i] & mask) >> bit;
     }
-    
-    __syncthreads();
+
     // Perform exclusive scan (prefix sum of not bit)
     prefixSum[0] = 0;
-    for (int i = 1; i < windowSize; i++) {
+    for (int i = 1; i < n; i++) {
         prefixSum[i] = prefixSum[i - 1] + (1 - bitArray[i - 1]);
     }
-    __syncthreads();
 
-    int totalFalses = prefixSum[windowSize - 1] + (1 - bitArray[windowSize - 1]);
-    
+    int totalFalses = prefixSum[n - 1] + (1 - bitArray[n - 1]);
+
     // Reorder
-    for (int i = 0; i < windowSize; i++) {
+    for (int i = 0; i < n; i++) {
         int destination;
         if (bitArray[i] == 0) {
             destination = prefixSum[i];
         } else {
             destination = i - prefixSum[i] + totalFalses;
         }
-        output[destination] = currentWindow[i];
+        output[destination] = window[i];
     }
-    __syncthreads();
+
     // Copy back to input array for next iteration
-    for (int i = 0; i < windowSize; i++) {
-        currentWindow[i] = output[i];
+    for (int i = 0; i < n; i++) {
+        window[i] = output[i];
     }
-    __syncthreads();
-    return totalFalses;
+
+    delete[] output;
+    delete[] bitArray;
+    delete[] prefixSum;
 }
 
 __global__ void radixSort_gpu(int* windows, int width, int height, int W) {
@@ -193,24 +178,20 @@ __global__ void radixSort_gpu(int* windows, int width, int height, int W) {
 
     // add the window to shared memory
     int windowSize = (2 * W + 1) * (2 * W + 1);
-    
+
+    int* currentWindow = &windows[(x + y * width) * windowSize];    
     // Radix sort
     for (int bit = 0; bit < MAX_DIGITS; bit++) {
-        split(windows, windowSize, bit, width, height);
+        split(currentWindow, bit, W);
+        __syncthreads();
     }
 }
 
 __global__ void selectMedian(int* windows, int* img_out, int width, int height, int W) {
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
-    
-    if (x < width && y < height) {
-        int windowSize = (2 * W + 1) * (2 * W + 1);
-        int* currentWindow = &windows[(y * width + x) * windowSize];
-        
-        // Select the median (middle element after sorting)
-        img_out[y * width + x] = currentWindow[windowSize / 2];
-    }
+    int pixel = blockIdx.x * blockDim.x + threadIdx.x + (blockIdx.y * blockDim.y + threadIdx.y) * width;
+    int windowSize = (2 * W + 1) * (2 * W + 1);
+    if (pixel >= width * height) return;
+    img_out[pixel] = windows[pixel * windowSize + windowSize / 2];
 }
 
 
@@ -226,8 +207,8 @@ void filtro_mediana_gpu(int* img_in, int* img_out, int width, int height, int W)
 
     int windowSize = (2 * W + 1) * (2 * W + 1);
 
-    dim3 threadsPerBlock(windowSize);
-    dim3 blocksPerGrid(height * width);
+    dim3 threadsPerBlock((2 * W + 1), (2 * W + 1));
+    dim3 blocksPerGrid(height, width);
 
     // Allocate device memory for windows
     cudaMalloc(&d_windows, width * height * windowSize * sizeof(int));
@@ -235,18 +216,29 @@ void filtro_mediana_gpu(int* img_in, int* img_out, int width, int height, int W)
     // Fill windows
     fillWindows<<<blocksPerGrid, threadsPerBlock>>>(d_img_in, d_windows, width, height, W);
 
+    cudaDeviceSynchronize();
+
     // Sort windows
-    // radixSort_gpu<<<blocksPerGrid, threadsPerBlock>>>(d_windows, width, height, W);
+    radixSort_gpu<<<blocksPerGrid, threadsPerBlock>>>(d_windows, width, height, W);
+    
 
     // Select median
-    selectMedian<<<blocksPerGrid, threadsPerBlock>>>(d_windows, d_img_out, width, height, W);
+    // selectMedian<<<blocksPerGrid, 1>>>(d_windows, d_img_out, width, height, W);
 
+    dim3 threadsPerBlock2(32, 32);
+    dim3 blocksPerGrid2((width + threadsPerBlock2.x - 1) / threadsPerBlock2.x, (height + threadsPerBlock2.y - 1) / threadsPerBlock2.y);
+    selectMedian<<<blocksPerGrid2, threadsPerBlock2>>>(d_windows, d_img_out, width, height, W);
 
-    cudaDeviceSynchronize();
     cudaMemcpy(img_out, d_img_out, size, cudaMemcpyDeviceToHost);
 
     cudaFree(d_img_in);
     cudaFree(d_img_out);
+
+    //print cuda errors
+    cudaError_t error = cudaGetLastError();
+    if (error != cudaSuccess) {
+        printf("CUDA error: %s\n", cudaGetErrorString(error));
+    }
 }
 
 
