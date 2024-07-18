@@ -5,7 +5,7 @@
 #include "cuda_runtime.h"
 #include "chrono"
 #include "CImg.h"
-#define ITERATIONS 10
+#define ITERATIONS 1
 using namespace cimg_library;
 
 void filtro_mediana_gpu(int * img_in, int * img_out, int width, int height, int W);

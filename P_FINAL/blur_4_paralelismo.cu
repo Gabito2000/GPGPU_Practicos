@@ -124,66 +124,101 @@ __global__ void fillWindows(int* img_in, int* windows, int width, int height, in
     int poss_inicio_windows_arr = pixel * (2 * W + 1) * (2 * W + 1); 
     int poss_elemento_en_ventana = elemento_ventana + poss_inicio_windows_arr;
 
-    windows[poss_elemento_en_ventana] = img_in[pixel];
-}
+    int elemento_de_la_ventana_que_copiaremos = pixel + (threadIdx.x - W) + (threadIdx.y - W) * width;
 
-// split function
-__device__ void split(int* window, int bit, int W) {
-    int n = (2 * W + 1) * (2 * W + 1);
-    int* output = new int[n];
-    int* bitArray = new int[n];
-    int* prefixSum = new int[n];
-
-    int mask = 1 << bit;
-
-    // Extract bit
-    for (int i = 0; i < n; i++) {
-        bitArray[i] = (window[i] & mask) >> bit;
+    if (elemento_de_la_ventana_que_copiaremos < 0 || elemento_de_la_ventana_que_copiaremos >= width * height) {
+        windows[poss_elemento_en_ventana] = 0;
+    } else {
+        windows[poss_elemento_en_ventana] = img_in[elemento_de_la_ventana_que_copiaremos];
     }
 
-    // Perform exclusive scan (prefix sum of not bit)
-    prefixSum[0] = 0;
-    for (int i = 1; i < n; i++) {
-        prefixSum[i] = prefixSum[i - 1] + (1 - bitArray[i - 1]);
-    }
-
-    int totalFalses = prefixSum[n - 1] + (1 - bitArray[n - 1]);
-
-    // Reorder
-    for (int i = 0; i < n; i++) {
-        int destination;
-        if (bitArray[i] == 0) {
-            destination = prefixSum[i];
-        } else {
-            destination = i - prefixSum[i] + totalFalses;
+    __syncthreads();
+    
+    if (threadIdx.x == 0 && threadIdx.y == 0 && blockIdx.x == 0 && blockIdx.y == 0) {
+        printf("\nfirst window\n");
+        for (int i = 0; i < (2 * W + 1) * (2 * W + 1); i++) {
+            printf("%d ", windows[i]);
         }
-        output[destination] = window[i];
     }
-
-    // Copy back to input array for next iteration
-    for (int i = 0; i < n; i++) {
-        window[i] = output[i];
-    }
-
-    delete[] output;
-    delete[] bitArray;
-    delete[] prefixSum;
 }
 
 __global__ void radixSort_gpu(int* windows, int width, int height, int W) {
+   
+
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
-
     if (x >= width || y >= height) return;
 
-    // add the window to shared memory
     int windowSize = (2 * W + 1) * (2 * W + 1);
+    int tdx = threadIdx.x + threadIdx.y * blockDim.x;
+    int* currentWindow = &windows[(x + y * width) * windowSize];
 
-    int* currentWindow = &windows[(x + y * width) * windowSize];    
-    // Radix sort
-    for (int bit = 0; bit < MAX_DIGITS; bit++) {
-        split(currentWindow, bit, W);
+
+    // if (blockIdx.x == 0 && blockIdx.y == 0 && threadIdx.x == 0 && threadIdx.y == 0 
+    //     printf("array to be sorted\n");
+    //     for (int i = 0; i < windowSize; i++) {
+    //         printf("%d ", currentWindow[i]);
+    //     }
+    // }
+
+    __shared__ int totalFalses;
+    __shared__ int window[(2 * 3 + 1) * (2 * 3 + 1)];
+    __shared__ int bitArray[(2 * 3 + 1) * (2 * 3 + 1)];
+    __shared__ int prefixSum[(2 * 3 + 1) * (2 * 3 + 1)];
+
+    // Initialize shared memory to avoid garbage values
+    if (tdx < windowSize) {
+        window[tdx] = 0;
+        bitArray[tdx] = 0;
+        prefixSum[tdx] = 0;
+    }
+    __syncthreads();
+
+    for (int bit = 0; bit < 32; bit++) {  // Assuming 32-bit integers
         __syncthreads();
+
+        int mask = 1 << bit;
+        if (tdx < windowSize) {
+            bitArray[tdx] = (currentWindow[tdx] & mask) >> bit;
+        }
+
+        __syncthreads();
+
+        // Perform exclusive scan (prefix sum of not bit)
+        if (tdx == 0) {
+            prefixSum[0] = 0;
+            for (int i = 1; i < windowSize; i++) {
+                prefixSum[i] = prefixSum[i - 1] + (1 - bitArray[i - 1]);
+            }
+            totalFalses = prefixSum[windowSize - 1] + (1 - bitArray[windowSize - 1]);
+        }
+
+        __syncthreads();
+
+        if (tdx < windowSize) {
+            // Reorder
+            window[tdx] = currentWindow[tdx];
+            __syncthreads();
+
+            int destination;
+            if (bitArray[tdx] == 0) {
+                destination = prefixSum[tdx];
+            } else {
+                destination = tdx - prefixSum[tdx] + totalFalses;
+            }
+
+            currentWindow[destination] = window[tdx];
+        }
+        __syncthreads();
+
+        
+    }
+    if (blockIdx.x == 0 && blockIdx.y == 0 && tdx == 0) {
+        printf("\narray sorted\n");
+        for (int i = 0; i < windowSize; i++) {
+            printf("%d ", currentWindow[i]);
+        }
+        printf("\n");
     }
 }
 
