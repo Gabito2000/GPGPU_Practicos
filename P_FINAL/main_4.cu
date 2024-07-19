@@ -29,7 +29,7 @@ int main(int argc, char** argv){
 	int *img_matrix = image.data();
    	int *img_out_matrix = image_out.data();
 
-	int w = 3;
+	int w = 7;
 
 	struct timeval start, end;
     gettimeofday(&start, NULL);
