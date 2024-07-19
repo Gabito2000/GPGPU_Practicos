@@ -5,7 +5,7 @@
 #include "cuda_runtime.h"
 #include "chrono"
 #include "CImg.h"
-#define ITERATIONS 1
+#define ITERATIONS 10
 using namespace cimg_library;
 
 void filtro_mediana_gpu(int * img_in, int * img_out, int width, int height, int W);
@@ -29,7 +29,7 @@ int main(int argc, char** argv){
 	int *img_matrix = image.data();
    	int *img_out_matrix = image_out.data();
 
-	int w = 7;
+	int w = 3;
 
 	struct timeval start, end;
     gettimeofday(&start, NULL);

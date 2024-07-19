@@ -138,13 +138,6 @@ __global__ void fillWindows(int* img_in, int* windows, int width, int height, in
     }
 
     __syncthreads();
-    
-    if (x == 0 && y == 0 && elemento_ventana == 0) {
-        printf("\nfirst window\n");
-        for (int i = 0; i < windowSize; i++) {
-            printf("%d ", windows[i]);
-        }
-    }
 }
 
 __global__ void radixSort_gpu(int* windows, int width, int height, int W) {
@@ -159,10 +152,12 @@ __global__ void radixSort_gpu(int* windows, int width, int height, int W) {
     int pixel = x + y * width;
     int* currentWindow = &windows[pixel * windowSize];
     
+    extern __shared__ int sharedMem[];
+    int* output = sharedMem;
+    int* bitArray = &sharedMem[windowSize];
+    int* prefixSum = &sharedMem[2 * windowSize];
+
     __shared__ int totalFalses;
-    __shared__ int output[225];  // Assuming max W is 7: (2*7+1)^2 = 225
-    __shared__ int bitArray[225];
-    __shared__ int prefixSum[225];
 
     for (int bit = 0; bit < MAX_DIGITS; bit++) {
         int mask = 1 << bit;
@@ -225,7 +220,8 @@ void filtro_mediana_gpu(int* img_in, int* img_out, int width, int height, int W)
     cudaDeviceSynchronize();
 
     // Sort windows
-    radixSort_gpu<<<blocksPerGrid, threadsPerBlock>>>(d_windows, width, height, W);
+    size_t sharedMemSize = 3 * windowSize * sizeof(int); // for output, bitArray, and prefixSum
+    radixSort_gpu<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(d_windows, width, height, W);
     cudaDeviceSynchronize();
 
     // Select median
