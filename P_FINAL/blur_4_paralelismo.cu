@@ -160,7 +160,7 @@ __global__ void radixSort_gpu(int* windows, int width, int height, int W) {
     int* currentWindow = &windows[pixel * windowSize];
     
     __shared__ int totalFalses;
-    __shared__ int output[225];  // Assuming max W is 3: (2*3+1)^2 = 49
+    __shared__ int output[225];  // Assuming max W is 7: (2*7+1)^2 = 225
     __shared__ int bitArray[225];
     __shared__ int prefixSum[225];
 
