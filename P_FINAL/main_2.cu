@@ -30,33 +30,46 @@ int main(int argc, char** argv){
 	int *img_matrix = image.data();
     int *img_out_matrix = image_out.data();
 
-	int w = 3;
+	int w[] = {1,2}; 
 	struct timeval start, end;
-    gettimeofday(&start, NULL);
-    for (int i = 0; i < ITERATIONS; i++){
-		filtro_mediana_cpu(img_matrix, img_out_matrix, image.width(), image.height(), w);
-	}
-	gettimeofday(&end, NULL);
-	double duration = time_diff(&start, &end);
-	
+	char nombreArchivo[50];
 	printf("version 2 ----------------------- \n");
 	printf("RadixSort \n");
-	printf("Tiempo CPU: %f\n", duration /ITERATIONS);
-	image_out.save("output_cpu_2.pgm");
+
+	// CPU
+	for (int j = 0; j < (sizeof(w) / sizeof(w[0])); j++) {
+		gettimeofday(&start, NULL);
+		for (int i = 0; i < ITERATIONS; i++){
+			filtro_mediana_cpu(img_matrix, img_out_matrix, image.width(), image.height(), w[j]);
+		}
+		gettimeofday(&end, NULL);
+		double duration = time_diff(&start, &end);
+		
+		printf("Tiempo CPU: %f\n", duration /ITERATIONS);
+        sprintf(nombreArchivo, "output_cpu_2_w%d.pgm", w[j]);
+        image_out.save(nombreArchivo);
+	}
 
 	// GPU
 	image_out = CImg<int>(image.width(), image.height(),1,1,0);
 	img_matrix = image.data();
 	img_out_matrix = image_out.data();
+
+
 	
-	gettimeofday(&start, NULL);
-	for (int i = 0; i < ITERATIONS; i++){
-		filtro_mediana_gpu(img_matrix, img_out_matrix, image.width(), image.height(), w);
-	}
-	gettimeofday(&end, NULL);
-	duration = time_diff(&start, &end);
-	printf("Tiempo GPU: %f\n", duration /ITERATIONS);
-	image_out.save("output_gpu_2.pgm");
+	for (int j = 0; j < (sizeof(w) / sizeof(w[0])); j++) {
+        struct timeval start, end;
+        gettimeofday(&start, NULL);
+        for (int i = 0; i < ITERATIONS; i++) {
+            filtro_mediana_gpu(img_matrix, img_out_matrix, image.width(), image.height(), w[j]);
+        }
+        gettimeofday(&end, NULL);
+        double duration = time_diff(&start, &end);
+        printf("Tiempo GPU con (w=%d) : %f\n", w[j], duration / ITERATIONS);
+
+        sprintf(nombreArchivo, "output_gpu_2_w%d.pgm", w[j]);
+        image_out.save(nombreArchivo);
+    }
    	
    return 0;
 }
