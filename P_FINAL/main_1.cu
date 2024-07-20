@@ -30,28 +30,40 @@ int main(int argc, char** argv){
 	int *img_matrix = image.data();
    int *img_out_matrix = image_out.data();
 
-	int w = 3;
+	int w[] = {1,2}; 
 	struct timeval start, end;
-    gettimeofday(&start, NULL);
-    for (int i = 0; i < ITERATIONS; i++){
-		filtro_mediana_cpu(img_matrix, img_out_matrix, image.width(), image.height(), w);
-	}
-	gettimeofday(&end, NULL);
-	double duration = time_diff(&start, &end);
 	
+	// CPU
 	printf("version 1 ----------------------- \n");
 	printf("Quicksort \n");
-	printf("Tiempo CPU: %f\n", duration /ITERATIONS);
-	image_out.save("output_cpu_1.pgm");
-	
-	gettimeofday(&start, NULL);
-	for (int i = 0; i < ITERATIONS; i++){
-		filtro_mediana_gpu(img_matrix, img_out_matrix, image.width(), image.height(), w);
+	for (int j = 0; j < (sizeof(w) / sizeof(w[0])); j++) {
+		gettimeofday(&start, NULL);
+		for (int i = 0; i < ITERATIONS; i++){
+			filtro_mediana_cpu(img_matrix, img_out_matrix, image.width(), image.height(), w[j]);
+		}
+		gettimeofday(&end, NULL);
+		double duration = time_diff(&start, &end);
+		
+
+		printf("Tiempo 	CPU con (w=%d) : %f\n", w[j], duration / ITERATIONS);
+        char nombreArchivo[50];
+        sprintf(nombreArchivo, "output_cpu_1_w%d.pgm", w[j]);
+        image_out.save(nombreArchivo);
 	}
-	gettimeofday(&end, NULL);
-	duration = time_diff(&start, &end);
-	printf("Tiempo GPU: %f\n", duration /ITERATIONS);
-	image_out.save("output_gpu_1.pgm");
+
+	// GPU
+	for (int j = 0; j < (sizeof(w) / sizeof(w[0])); j++) {	
+		gettimeofday(&start, NULL);
+		for (int i = 0; i < ITERATIONS; i++){
+			filtro_mediana_gpu(img_matrix, img_out_matrix, image.width(), image.height(), w[j]);
+		}
+		gettimeofday(&end, NULL);
+		double  duration = time_diff(&start, &end);
+		printf("Tiempo GPU con (w=%d) : %f\n", w[j], duration / ITERATIONS);
+        char nombreArchivo[50];
+        sprintf(nombreArchivo, "output_gpu_1_w%d.pgm", w[j]);
+        image_out.save(nombreArchivo);
+	}
    	
    return 0;
 }
