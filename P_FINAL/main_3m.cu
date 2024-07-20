@@ -35,8 +35,8 @@ int main(int argc, char** argv) {
 
     int w[] = {1,2,3,5}; 
 
-    printf("version 3 ----------------------- \n");
-    printf("Radixsort con Thrust \n");
+    printf("version 3m ----------------------- \n");
+    printf("Radixsort con Thrust Mejorado\n");
 
     for (int j = 0; j < (sizeof(w) / sizeof(w[0])); j++) {
         struct timeval start, end;
@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
         printf("Tiempo GPU con (w=%d) : %f\n", w[j], duration / ITERATIONS);
 
         char nombreArchivo[50];
-        sprintf(nombreArchivo, "output_gpu_3_w%d.pgm", w[j]);
+        sprintf(nombreArchivo, "output_gpu_3_m_w%d.pgm", w[j]);
         image_out.save(nombreArchivo);
     }
 

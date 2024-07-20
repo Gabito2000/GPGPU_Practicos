@@ -34,7 +34,7 @@ int main(int argc, char** argv){
 	struct timeval start, end;
     gettimeofday(&start, NULL);
     for (int i = 0; i < ITERATIONS; i++){
-		// filtro_mediana_cpu(img_matrix, img_out_matrix, image.width(), image.height(), w);
+		filtro_mediana_cpu(img_matrix, img_out_matrix, image.width(), image.height(), w);
 	}
 	gettimeofday(&end, NULL);
 	double duration = time_diff(&start, &end);

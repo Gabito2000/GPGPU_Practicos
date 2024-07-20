@@ -37,3 +37,8 @@ clean:
 	nvcc -arch=sm_60 main_5.cu  blur_5_unificado.cu -o blur_5 -O3 -L/usr/X11R6/lib -lm -lpthread -lX11 -lnvToolsExt -w -std=c++11
 	./blur_5 fing1_ruido.pgm
 	./blur_5 Facultad_de_Ingeniería_UDELAR.pgm
+
+3m:
+	nvcc -arch=sm_60 main_3m.cu blur_3m_thrust.cu -o blur_3m -O3 -L/usr/X11R6/lib -lm -lpthread -lX11 -lnvToolsExt -w -std=c++11
+	./blur_3m fing1_ruido.pgm
+
