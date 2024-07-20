@@ -12,8 +12,6 @@
 
 
 using namespace std;
-
-
 __device__ void swap(int& a, int& b) {
     //swap two elements without using a temporary variable
     a = a + b;
@@ -21,27 +19,17 @@ __device__ void swap(int& a, int& b) {
     a = a - b;
 }
 
-__device__ int partition(int* arr, int low, int high) {
-    int pivot = arr[high];
-    int i = low - 1;
 
-    for (int j = low; j <= high - 1; j++) {
-        if (arr[j] < pivot) {
-            i++;
-            swap(arr[i], arr[j]);
+__device__ void sort(int* window, int windowSize){
+    for (int i = 0; i < windowSize; i++){
+        for (int j = 0; j < windowSize - i - 1; j++){
+            if (window[j] > window[j + 1]){
+                swap(window[j], window[j + 1]);
+            }
         }
     }
-    swap(arr[i + 1], arr[high]);
-    return i + 1;
 }
 
-__device__ void quickSort(int* arr, int low, int high) {
-    if (low < high) {
-        int pi = partition(arr, low, high);
-        quickSort(arr, low, pi - 1);
-        quickSort(arr, pi + 1, high);
-    }
-}
 
 __global__ void filtro_mediana_kernel(int* d_input, int* d_output, int width, int height, int W){
 
@@ -50,20 +38,24 @@ __global__ void filtro_mediana_kernel(int* d_input, int* d_output, int width, in
     
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
-    int count = 0;
-
-    for (int i = x - W; i <= x + W; i++){
-        for (int j = y - W; j <= y + W; j++){
-            if (i >= 0 && i < width && j >= 0 && j < height){
-                window[count++] = d_input[j * width + i];
+    
+    if (x < width && y < height){
+        int count = 0;
+        for (int i = x - W; i <= x + W; i++){
+            for (int j = y - W; j <= y + W; j++){
+                if (i >= 0 && i < width && j >= 0 && j < height){
+                    window[count++] = d_input[j * width + i];
+                }
             }
         }
+
+        //sort array
+
+        sort(window, windowSize);
+       
+        d_output[y * width + x] = window[windowSize / 2];
     }
-
-    //sort array with a quicksort
-    quickSort(window, 0, count - 1);
-    d_output[y * width + x] = window[count / 2];
-
+    delete[] window;
 }
 
 void filtro_mediana_gpu(int * img_in, int * img_out, int width, int height, int W){
@@ -82,6 +74,12 @@ void filtro_mediana_gpu(int * img_in, int * img_out, int width, int height, int 
 
     cudaFree(d_input);
     cudaFree(d_output);    
+    
+    cudaError_t error = cudaGetLastError();
+    if (error != cudaSuccess) {
+        printf("CUDA error: %s\n", cudaGetErrorString(error));
+    }
+
 }
 
 void filtro_mediana_cpu(int * img_in, int * img_out, int width, int height, int W){
