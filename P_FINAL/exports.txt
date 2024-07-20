@@ -2,4 +2,4 @@ export CUDA_INSTALL_PATH=/usr/local/cuda-12
 export CUB=/inco/home01/m/mfreire/bibliotecas/cub
 export PATH=$CUDA_INSTALL_PATH/bin:$PATH
 export LD_LIBRARY_PATH=$CUDA_INSTALL_PATH/lib64:$LD_LIBRARY_PATH
-export THRUST=$CUDA_INSTALL_PATH/include/thrust
+export THRUST=$CUDA_INSTALL_PATH/include/thrustmake 3

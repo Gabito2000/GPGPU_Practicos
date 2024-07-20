@@ -45,7 +45,8 @@ int main(int argc, char** argv){
 		gettimeofday(&end, NULL);
 		double duration = time_diff(&start, &end);
 		
-		printf("Tiempo CPU: %f\n", duration /ITERATIONS);
+		printf("Tiempo CPU con (w=%d) : %f\n", w[j], duration / ITERATIONS);
+        char nombreArchivo[50];
         sprintf(nombreArchivo, "output_cpu_2_w%d.pgm", w[j]);
         image_out.save(nombreArchivo);
 	}
