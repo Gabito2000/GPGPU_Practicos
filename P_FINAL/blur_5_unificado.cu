@@ -16,7 +16,7 @@
 #include <thrust/functional.h>
 #include <cuda_runtime.h>
 #include <thrust/iterator/constant_iterator.h>
-#define MAX_DIGITS 32 // Assuming 32-bit integers
+#define MAX_DIGITS 32 // Asumiendo 32-bit integers
 #define MAX_INT 3000
 
 using namespace std;
@@ -53,7 +53,7 @@ __global__ void gpuUnificado(int* img_in, int* windows, int width, int height, i
 
     __syncthreads();
 
-    // Sort windows
+    // Ordenamos las ventanas
     if (x >= width || y >= height) return;
     
     int tdx = threadIdx.x + threadIdx.y * blockDim.x;
@@ -64,11 +64,11 @@ __global__ void gpuUnificado(int* img_in, int* windows, int width, int height, i
     for (int bit = 0; bit < MAX_DIGITS; bit++) {
         int mask = 1 << bit;
 
-        // Extract bit
+        // Extracción de bit
         bitArray[tdx] = (currentWindowCopy[tdx] & mask) >> bit;
         __syncthreads();
 
-        // Perform exclusive scan (prefix sum of not bit)
+        // Exclusive Scan
         if (tdx == 0) {
             prefixSum[0] = 0;
             for (int i = 1; i < windowSize; i++) {
@@ -78,7 +78,7 @@ __global__ void gpuUnificado(int* img_in, int* windows, int width, int height, i
         }
         __syncthreads();
     
-        // Reorder
+        // Reordenamos
         int destination;
         if (bitArray[tdx] == 0) {
             destination = prefixSum[tdx];
@@ -88,12 +88,12 @@ __global__ void gpuUnificado(int* img_in, int* windows, int width, int height, i
         output[destination] = currentWindowCopy[tdx];
         __syncthreads();
 
-        // Copy back to currentWindow
+        // Copiamos de vuelta a currentWindow
         currentWindowCopy[tdx] = output[tdx];
         __syncthreads();
     }
 
-    // Select median
+    // Seleccionamos el elemento del medio
     img_out[pixel] = currentWindowCopy[windowSize / 2];
 
 }
@@ -112,8 +112,8 @@ void filtro_mediana_gpu(int* img_in, int* img_out, int width, int height, int W)
     dim3 threadsPerBlock(2 * W + 1, 2 * W + 1);
     dim3 blocksPerGrid(width, height);
 
-    // Fill windows
-    size_t sharedMemSize = 4 * windowSize * sizeof(int);
+    // LLenar ventana
+    size_t sharedMemSize = 4 * windowSize * sizeof(int); // para output, bitArray y prefixSum
     gpuUnificado<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(d_img_in, d_windows, width, height, W, d_img_out);
 
     cudaMemcpy(img_out, d_img_out, size, cudaMemcpyDeviceToHost);

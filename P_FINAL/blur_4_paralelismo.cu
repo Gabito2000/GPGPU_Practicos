@@ -16,38 +16,10 @@
 #include <thrust/functional.h>
 #include <cuda_runtime.h>
 #include <thrust/iterator/constant_iterator.h>
-#define MAX_DIGITS 32 // Assuming 32-bit integers
+#define MAX_DIGITS 32 // Asumiendo 32-bit integers
 #define MAX_INT 3000
 
 using namespace std;
-
-
-// Anexo A: Radix Sort
-// Uno de los algoritmos de ordenamiento más eficientes para ordenar claves cortas en
-// procesadores paralelos es el radix sort. El algoritmo comienza considerando el primer bit de
-// cada clave, empezando por el bit menos significativo. Utilizando este bit se particiona el
-// conjunto de claves de forma que todas las claves que tengan un 0 en ese bit se ubiquen antes
-// que las claves que tienen el bit en 1, manteniendo el orden relativo de las claves con mismo
-// valor de bit. Una vez completado este paso se hace lo mismo para cada uno de los bits de la
-// clave hasta completar todos sus bits.
-// Definimos la primitiva split(input, n) como la operación que ordena el arreglo input de acuerdo
-// al valor b del bit n de cada elemento. Para implementar en GPU dicha primitiva se procederá
-// de la siguiente manera:
-// • En un arreglo temporal e almacenar el valor de not b para cada posición i de input.
-// • Computar la suma prefija (exclusive scan) del arreglo. Ahora cada posición del arreglo
-// contiene la cantidad de f de elementos de input con b=0 que hay antes que esa posición.
-// Para los elementos con b=0, esta cantidad determina la posición en el arreglo de salida.
-// El último elemento del arreglo de salida del scan contiene el total de posiciones con b=0
-// (hay que sumar 1 a este valor si la última posición tiene b=0), denominada totalFalses.
-// • Ahora se computa el índice de las posiciones con b=1 en el arreglo de salida. Para cada
-// posición i, este índice será t = i - f + totalFalses.
-// • Una vez obtenidos los índices anteriores se graba cada elemento de input en el arreglo
-// de salida en la posición t o f dependiendo de si b es 1 o 0.
-// Para implementar el algoritmo de radix sort utilizando la primitiva split simplemente debe
-// inicializarse una máscara binaria para aislar el bit menos significativo, realizar el split del
-// arreglo según ese bit, comprobar si el arreglo ya está ordenado y, si no lo está, hacer un shift
-// a la izquierda de la máscara y volver a iterar. El procedimiento anterior se ejemplifica en la
-// figura.
 
 void radixSort_cpu(std::vector<int>& arr) {
     int n = arr.size();
@@ -60,12 +32,12 @@ void radixSort_cpu(std::vector<int>& arr) {
     for (int bit = 0; bit < MAX_DIGITS; bit++) {
         int mask = 1 << bit;
 
-        // Extract bit
+        // Extracción de bit
         for (int i = 0; i < n; i++) {
             bitArray[i] = (arr[i] & mask) >> bit;
         }
 
-        // Perform exclusive scan (prefix sum of not bit)
+        // Exclusive Scan
         prefixSum[0] = 0;
         for (int i = 1; i < n; i++) {
             prefixSum[i] = prefixSum[i - 1] + (1 - bitArray[i - 1]);
@@ -73,8 +45,8 @@ void radixSort_cpu(std::vector<int>& arr) {
 
         int totalFalses = prefixSum[n - 1] + (1 - bitArray[n - 1]);
 
-        // Reorder
-        std::fill(output.begin(), output.end(), 0); // Ensure the output vector is cleared
+        // Reordenamos
+        std::fill(output.begin(), output.end(), 0); // LLenamos de 0s para evitar errores
 
         for (int i = 0; i < n; i++) {
             int destination;
@@ -86,7 +58,7 @@ void radixSort_cpu(std::vector<int>& arr) {
             output[destination] = arr[i];
         }
 
-        // Copy back to input array for next iteration
+        // Copiamos de vuelta a arr
         std::copy(output.begin(), output.end(), arr.begin());
     }
 }
@@ -162,11 +134,11 @@ __global__ void radixSort_gpu(int* windows, int width, int height, int W) {
     for (int bit = 0; bit < MAX_DIGITS; bit++) {
         int mask = 1 << bit;
 
-        // Extract bit
+        // Extracción de bit
         bitArray[tdx] = (currentWindow[tdx] & mask) >> bit;
         __syncthreads();
 
-        // Perform exclusive scan (prefix sum of not bit)
+        // Exclusive Scan
         if (tdx == 0) {
             prefixSum[0] = 0;
             for (int i = 1; i < windowSize; i++) {
@@ -176,7 +148,7 @@ __global__ void radixSort_gpu(int* windows, int width, int height, int W) {
         }
         __syncthreads();
     
-        // Reorder
+        // Reordenamos
         int destination;
         if (bitArray[tdx] == 0) {
             destination = prefixSum[tdx];
@@ -186,7 +158,7 @@ __global__ void radixSort_gpu(int* windows, int width, int height, int W) {
         output[destination] = currentWindow[tdx];
         __syncthreads();
 
-        // Copy back to currentWindow
+        // Copiamos de vuelta a currentWindow
         currentWindow[tdx] = output[tdx];
         __syncthreads();
     }
@@ -215,16 +187,16 @@ void filtro_mediana_gpu(int* img_in, int* img_out, int width, int height, int W)
     dim3 threadsPerBlock(2 * W + 1, 2 * W + 1);
     dim3 blocksPerGrid(width, height);
 
-    // Fill windows
+    // LLenar ventana
     fillWindows<<<blocksPerGrid, threadsPerBlock>>>(d_img_in, d_windows, width, height, W);
     cudaDeviceSynchronize();
 
-    // Sort windows
-    size_t sharedMemSize = 3 * windowSize * sizeof(int); // for output, bitArray, and prefixSum
+    // Ordenamos las ventanas
+    size_t sharedMemSize = 3 * windowSize * sizeof(int); // para output, bitArray y prefixSum
     radixSort_gpu<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(d_windows, width, height, W);
     cudaDeviceSynchronize();
 
-    // Select median
+    // Seleccionamos el elemento del medio
     dim3 threadsPerBlock2(32, 32);
     dim3 blocksPerGrid2((width + threadsPerBlock2.x - 1) / threadsPerBlock2.x, 
                         (height + threadsPerBlock2.y - 1) / threadsPerBlock2.y);

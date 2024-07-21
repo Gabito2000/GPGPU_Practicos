@@ -30,7 +30,7 @@ int main(int argc, char** argv){
 	int *img_matrix = image.data();
     int *img_out_matrix = image_out.data();
 
-	int w[] = {1,2}; 
+	int w[] = {1}; 
 	struct timeval start, end;
 	char nombreArchivo[50];
 	printf("version 2 ----------------------- \n");

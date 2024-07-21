@@ -22,6 +22,7 @@
 using namespace std;
 
 #define MAX_INT 2147483647
+// Estructura para extraer la ventana alrededor de cada píxel
 struct ExtractWindow {
     int* d_img_in;
     int* d_windows;
@@ -58,6 +59,7 @@ struct ExtractWindow {
     }
 };
 
+// Estructura para seleccionar la mediana de cada ventana
 struct SelectMedian {
     int* d_windows;
     int* d_img_out;
@@ -80,6 +82,7 @@ struct SelectMedian {
     }
 };
 
+// Estructura para ordenar cada ventana utilizando Thrust
 struct SortWindow {
     int* d_windows;
     int* d_img_out;
@@ -95,6 +98,7 @@ struct SortWindow {
     }
 };
 
+// Función para aplicar el filtro de mediana en la GPU
 void filtro_mediana_gpu(int* img_in, int* img_out, int width, int height, int W) {
     int *d_windows;
     int *d_img_in, *d_img_out;
@@ -102,24 +106,28 @@ void filtro_mediana_gpu(int* img_in, int* img_out, int width, int height, int W)
     int windowSize = (2 * W + 1) * (2 * W + 1);
     size_t windowsSize = width * height * windowSize * sizeof(int);
 
-    // Allocate device memory
+    // Asigno memoria
     cudaMalloc(&d_img_in, size);
     cudaMalloc(&d_img_out, size);
     cudaMalloc(&d_windows, windowsSize);
 
-    // Copy input image to device
+    // Copio la imagen de entrada al dispositivo
     cudaMemcpy(d_img_in, img_in, size, cudaMemcpyHostToDevice);
 
     thrust::counting_iterator<int> begin(0);
     thrust::counting_iterator<int> end(width * height);
     thrust::counting_iterator<int> endExtractWindow(width * height * windowSize);
     
+    // Ordeno cada ventan
     thrust::for_each(thrust::device, begin, endExtractWindow, ExtractWindow(d_img_in, d_windows, width, height, W));
+   
+    // selecciono mediana de cada ventana
     thrust::for_each(thrust::device, begin, end, SortWindow(d_windows, d_img_out, windowSize));
-
+    
+    // copio al host
     cudaMemcpy(img_out, d_img_out, size, cudaMemcpyDeviceToHost);
 
-    // Free device memory
+    //libero la memoria
     cudaFree(d_img_in);
     cudaFree(d_img_out);
     cudaFree(d_windows);

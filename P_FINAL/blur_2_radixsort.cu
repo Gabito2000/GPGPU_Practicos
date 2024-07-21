@@ -16,7 +16,7 @@
 #include <thrust/functional.h>
 #include <cuda_runtime.h>
 #include <thrust/iterator/constant_iterator.h>
-#define MAX_DIGITS 32 // Assuming 32-bit integers
+#define MAX_DIGITS 32 // Asumiendo 32-bit integers
 #define MAX_INT 2147483647
 
 using namespace std;
@@ -60,12 +60,12 @@ void radixSort_cpu(std::vector<int>& arr) {
     for (int bit = 0; bit < MAX_DIGITS; bit++) {
         int mask = 1 << bit;
 
-        // Extract bit
+        // Extracción de bit
         for (int i = 0; i < n; i++) {
             bitArray[i] = (arr[i] & mask) >> bit;
         }
 
-        // Perform exclusive scan (prefix sum of not bit)
+         // Exclusive Scan
         prefixSum[0] = 0;
         for (int i = 1; i < n; i++) {
             prefixSum[i] = prefixSum[i - 1] + (1 - bitArray[i - 1]);
@@ -73,8 +73,8 @@ void radixSort_cpu(std::vector<int>& arr) {
 
         int totalFalses = prefixSum[n - 1] + (1 - bitArray[n - 1]);
 
-        // Reorder
-        std::fill(output.begin(), output.end(), 0); // Ensure the output vector is cleared
+        // Reordenamos
+        std::fill(output.begin(), output.end(), 0); // LLenamos de 0s para evitar errores
 
         for (int i = 0; i < n; i++) {
             int destination;
@@ -86,7 +86,7 @@ void radixSort_cpu(std::vector<int>& arr) {
             output[destination] = arr[i];
         }
 
-        // Copy back to input array for next iteration
+        // // Copiamos de vuelta a arr
         std::copy(output.begin(), output.end(), arr.begin());
     }
 }
@@ -133,7 +133,7 @@ __global__ void fillWindows(int* img_in, int* windows, int width, int height, in
             }
             else {
                 currentWindow[count] = padding;
-                padding = MAX_INT-padding; // To avoid sorting the padding
+                padding = MAX_INT-padding; // Para evitar el padding
             }
             count++;
         }
@@ -153,13 +153,13 @@ __device__ int split(int* windows, int windowSize, int bit, int width, int heigh
     int prefixSum[1024];
     int output[1024];
     
-    // Extract bit
+    // Extracción de bit
     for (int i = 0; i < windowSize; i++) {
         bitArray[i] = (currentWindow[i] & mask) >> bit;
     }
     
     __syncthreads();
-    // Perform exclusive scan (prefix sum of not bit)
+    // Exclusive Scan
     prefixSum[0] = 0;
     for (int i = 1; i < windowSize; i++) {
         prefixSum[i] = prefixSum[i - 1] + (1 - bitArray[i - 1]);
@@ -168,7 +168,7 @@ __device__ int split(int* windows, int windowSize, int bit, int width, int heigh
 
     int totalFalses = prefixSum[windowSize - 1] + (1 - bitArray[windowSize - 1]);
     
-    // Reorder
+     // Reordenamos
     for (int i = 0; i < windowSize; i++) {
         int destination;
         if (bitArray[i] == 0) {
@@ -179,7 +179,7 @@ __device__ int split(int* windows, int windowSize, int bit, int width, int heigh
         output[destination] = currentWindow[i];
     }
     __syncthreads();
-    // Copy back to input array for next iteration
+    // Copiamos de vuelta a currentWindow
     for (int i = 0; i < windowSize; i++) {
         currentWindow[i] = output[i];
     }
@@ -193,7 +193,6 @@ __global__ void radixSort_gpu(int* windows, int width, int height, int W) {
 
     if (x >= width || y >= height) return;
 
-    // add the window to shared memory
     int windowSize = (2 * W + 1) * (2 * W + 1);
     
     // Radix sort
@@ -210,7 +209,7 @@ __global__ void selectMedian(int* windows, int* img_out, int width, int height, 
         int windowSize = (2 * W + 1) * (2 * W + 1);
         int* currentWindow = &windows[(y * width + x) * windowSize];
         
-        // Select the median (middle element after sorting)
+        // Seleccionamos el elemento del medio
         img_out[y * width + x] = currentWindow[windowSize / 2];
     }
 }
@@ -229,17 +228,16 @@ void filtro_mediana_gpu(int* img_in, int* img_out, int width, int height, int W)
     dim3 threadsPerBlock((W * 2 + 1), (W * 2 + 1));
     dim3 blocksPerGrid((width + threadsPerBlock.x - 1) / threadsPerBlock.x, (height + threadsPerBlock.y - 1) / threadsPerBlock.y);
 
-    // Allocate device memory for windows
     size_t windowSize = (2 * W + 1) * (2 * W + 1) * sizeof(int);
     cudaMalloc(&d_windows, width * height * windowSize);
 
-    // Fill windows
+    // LLenar ventana
     fillWindows<<<blocksPerGrid, threadsPerBlock>>>(d_img_in, d_windows, width, height, W);
 
-    // Sort windows
+    // Ordenamos las ventanas
     radixSort_gpu<<<blocksPerGrid, threadsPerBlock>>>(d_windows, width, height, W);
 
-    // Select median
+    // Seleccionamos el elemento del medio
     selectMedian<<<blocksPerGrid, threadsPerBlock>>>(d_windows, d_img_out, width, height, W);
 
 
